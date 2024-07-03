@@ -1,21 +1,44 @@
-add_filter('gform_validation', callback: function ( $validation_result ) {
-    
-	$forms_array[44] = array("child_amount_field_id" => 4, "child_name_field_id" => 5, "ledger_form_id" => 46, "ledger_name_id" => 4, "ledger_amount_id" => 3);
+add_filter( 'gform_validation', function ( $validation_result ) {
+	//CSF
+	$forms_array[32] = array(
+		'child_amount_field_id' => 8,
+		'child_name_field_id'   => 19,
+		'ledger_form_id'        => 30,
+		'ledger_name_id'        => 1,
+		'ledger_amount_id'      => 4
+	);
+	//DP
+	$forms_array[62] = array(
+		'child_amount_field_id' => 8,
+		'child_name_field_id'   => 19,
+		'ledger_form_id'        => 60,
+		'ledger_name_id'        => 1,
+		'ledger_amount_id'      => 4
+	);
+	//EOF
+	$forms_array[26] = array(
+		'child_amount_field_id' => 8,
+		'child_name_field_id'   => 19,
+		'ledger_form_id'        => 28,
+		'ledger_name_id'        => 1,
+		'ledger_amount_id'      => 4
+	);
 
 	// get form
 	$form = $validation_result['form'];
-	//if form isnt here do nothing
-	if (!in_array($form['id'],array_keys($forms_array))){
+	//if form isnt in array do nothing
+	if ( ! in_array( $form['id'], array_keys( $forms_array ) ) ) {
 		return $validation_result;
 	}
 
 	$nested_form = new GP_Nested_Forms( $form );
 
-	// check if field called amount
+	$child_amount_field_id = $forms_array[ $form['id'] ]['child_amount_field_id'];
+
+    // check if field called amount
 	foreach ( $form['fields'] as $field ) {
 		// if there is then validate
-		$child_amount_field_id = $forms_array[$form['id']]["child_amount_field_id"];
-		if ( $field->id == $child_amount_field_id) {
+		if ( $field->id == $child_amount_field_id ) {
 			// get parent form then all child form entries
 			$parent_id          = $nested_form->get_parent_form_id();
 			$parent_form        = GFAPI::get_form( $parent_id );
@@ -35,7 +58,7 @@ add_filter('gform_validation', callback: function ( $validation_result ) {
 			$entries = $parent_form_nested->get_entries( $entries_array );
 			// add the total
 			$batch_value = 0;
-			$value       = str_replace( '$', '', $field->gppa_hydrated_value );
+			$value       = str_replace( ["$",","], '', $field->gppa_hydrated_value );
 			foreach ( $entries as $entry ) {
 				$child_form_id = $entry['form_id'];
 				$child_form    = GFAPI::get_form( $child_form_id );
@@ -48,50 +71,89 @@ add_filter('gform_validation', callback: function ( $validation_result ) {
 			$value += $batch_value;
 			// check against balance
 			// get ledger first
-			$ledger_form_id      = $forms_array[$form['id']]['ledger_form_id'];
-			$ledger_name_field   = $forms_array[$form['id']]['ledger_name_id'];
-			$ledger_amount_field = $forms_array[$form['id']]['ledger_amount_id'];
+			$ledger_form_id      = $forms_array[ $form['id'] ]['ledger_form_id'];
+			$ledger_name_field   = $forms_array[ $form['id'] ]['ledger_name_id'];
+			$ledger_amount_field = $forms_array[ $form['id'] ]['ledger_amount_id'];
 			$name_field          = null;
-			$name_field_id       = $forms_array[$form['id']]['child_name_field_id'];
+			$name_field_id       = $forms_array[ $form['id'] ]['child_name_field_id'];
 
-			for ( $j = 0; $j < count( $form['fields'] ); $j++ ) {
+			for ( $j = 0; $j < count( $form['fields'] ); $j ++ ) {
 				if ( $form['fields'][ $j ]->id == $name_field_id ) {
 					$name_field = $form['fields'][ $j ]->gppa_hydrated_value;
+                    break;
 				}
 			}
 
-			$ledger_entries = GFAPI::get_entries( $ledger_form_id );
-			$ledger_amount  = 0;
+            $search_criteria = array(); //status == active
+			$search_criteria['status'] = 'active';
+			$search_criteria['field_filters'] = array();
+            $paging_offset = 0;
+            $paging = array("offset" => $paging_offset, 'page_size' => 25);
+            $total_count = 0;
+
+			$search_criteria['field_filters'][] = ['key' => $ledger_name_field, 'value' => $name_field];
+
+
+			$ledger_entries = GFAPI::get_entries( $ledger_form_id, $search_criteria,null,$paging ,$total_count);
+
+            //if more entries then returned then make more calls until get them all
+            while ($total_count > count($ledger_entries)){
+	            $paging_offset += 25;
+	            $paging = array( 'offset' => $paging_offset, 'page_size' => 25 );
+
+	            $new_Entries = GFAPI::get_entries($ledger_form_id,$search_criteria,null,$paging,$total_count);
+
+                foreach ($new_Entries as $new_entry){
+		            $ledger_entries[] = $new_entry;
+	            }
+            }
+
+            $ledger_amount  = 0;
 			foreach ( $ledger_entries as $entry ) {
-				if ( $entry['status'] != 'trash' && $entry[ $ledger_name_field ] == $name_field ) {
-					$ledger_amount += $entry[ $ledger_amount_field ];
-				}
+				$ledger_amount += $entry[ $ledger_amount_field ];
 			}
+
+			$paging_offset = 0;
+			$paging = array( 'offset' => $paging_offset, 'page_size' => 25 );
+			$search_criteria['field_filters'][0] = ['key' => $name_field_id, 'value' => $name_field];
+            $search_criteria['field_filters'][] = ['key' => 'workflow_final_status', 'value' => 'pending'];
 
 			// subtract pending amount
 			$pending_disbursals = 0;
-			$child_entries      = GFAPI::get_entries( $form['id'] );
-			foreach ( $child_entries as $child_entry ) {
-				if ( $child_entry['status'] != 'trash' && $child_entry[ $name_field_id ] == $name_field && $child_entry['workflow_final_status'] == 'pending' ) {
-					$pending_disbursals += $child_entry[ $field['id'] ];
+			$child_entries      = GFAPI::get_entries( $form['id'] , $search_criteria,null, $paging ,$total_count);
+
+			//if more entries then returned then make more calls until get them all
+			while ($total_count > count($child_entries)){
+				$paging_offset += 25;
+				$paging = array( 'offset' => $paging_offset, 'page_size' => 25 );
+
+				$new_Entries = GFAPI::get_entries($form['id'], $search_criteria,null, $paging,$total_count);
+
+				foreach ($new_Entries as $new_entry){
+					$child_entries[] = $new_entry;
 				}
+			}
+
+			foreach ( $child_entries as $child_entry ) {
+				$pending_disbursals += $child_entry[ $field['id'] ];
 			}
 
 			$balance = ( $ledger_amount - $pending_disbursals ) + $batch_value;
 
 			if ( $value > $balance ) {
 				$field->failed_validation      = true;
-				$money_balance = number_format($balance,2);
-				$amount_over = $value-$balance;
-				$amount_over = number_format($amount_over,2);
+				$money_balance                 = number_format( $balance, 2 );
+				$amount_over                   = $value - $balance;
+				$amount_over                   = number_format( $amount_over, 2 );
 				$field->validation_message     = "With this request, your total requested amount exceeds your total available balance of $$money_balance by $$amount_over."; // change message to whatever you want message to be
 				$validation_result['is_valid'] = false;
 			}
 			$validation_result['form'] = $form;
+
 			return $validation_result;
 		}
 	}
 	$validation_result['form'] = $form;
+
 	return $validation_result;
-}
-);
+});
