@@ -1,0 +1,20 @@
+add_filter( 'gravityview_field_output', function ( $html, $args, $context ) {
+    $form_id_array = [3,45,5,7,21,51,25,11,29];
+
+	if (!is_null($args) && !is_null($args['entry']) && !is_null($args['entry']['form_id'])){
+		$form_id = $args['entry']['form_id'];
+	}
+	else{
+		$form_id = -1;
+	}
+	if ( in_array( $form_id, $form_id_array) ) {
+		if ( $args['value'] == 'Workflow Complete' ) {
+			$gf = Gravity_Flow::get_instance();
+			$workflow_complete_step = $gf->get_workflow_complete_step($form_id);
+			$step_name = $workflow_complete_step->get_name();
+			$html      = str_replace( 'Workflow Complete', $step_name, $html );
+		}
+	}
+
+	return $html;
+}, 10, 3 );
