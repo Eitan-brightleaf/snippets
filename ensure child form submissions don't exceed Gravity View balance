@@ -145,7 +145,7 @@ add_filter( 'gform_validation', function ( $validation_result ) {
 				$money_balance                 = number_format( $balance, 2 );
 				$amount_over                   = $value - $balance;
 				$amount_over                   = number_format( $amount_over, 2 );
-				$field->validation_message     = "With this request, your total requested amount exceeds your total available balance of $$money_balance by $$amount_over."; // change message to whatever you want message to be
+				$field->validation_message     = "With this request, your total requested amount exceeds your available balance of $$money_balance by $$amount_over."; // change message to whatever you want message to be
 				$validation_result['is_valid'] = false;
 			}
 			$validation_result['form'] = $form;
