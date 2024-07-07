@@ -1,0 +1,101 @@
+//to add checkboxes
+add_filter( 'gravityflow_step_settings_fields', 'add_workflow_checkboxs', 10, 2 );
+function add_workflow_checkboxs( $settings, $current_step_id ): array {
+
+	$step = gravity_flow()->get_step( $current_step_id );
+
+	if ( $step ) {
+		$stepType = $step->get_type(); //need step to check step type to show checkbox only on start step
+		if ( $stepType == 'workflow_start' ) {
+			$settings[0]['fields'][] = array( //drilling down to right part of array and adding GV approval checkbox
+				'label'   => esc_html__( 'Delay Workflow', 'gravityflow' ),
+				'type'    => 'checkbox',
+				'name'    => 'delay_workflow_checkbox',
+				'tooltip' => 'Check this box if you want the workflow to start on Gravity View approval INSTEAD of form submission.',
+				'choices' => array(
+					array(
+						'label' => esc_html__( 'Delay the workflow until Gravity View approval', 'gravityflow' ),
+						'name'  => 'delay_workflow_checkbox',
+					),
+				),
+			);
+			$settings[0]['fields'][] = array( //drilling down to right part of array and adding restart on subscription payment checkbox
+				'label'   => esc_html__( 'Restart Workflow', 'gravityflow' ),
+				'type'    => 'checkbox',
+				'name'    => 'restart_workflow_checkbox',
+				'tooltip' => 'Check this box if you want the workflow to restart on each subscription payment made through this form.',
+				'choices' => array(
+					array(
+						'label' => esc_html__( 'Restart the workflow on subscription payment', 'gravityflow' ),
+						'name'  => 'restart_workflow_checkbox',
+					),
+				),
+			);
+		}
+	}
+
+	return $settings;
+}
+
+
+add_action( 'gravityflow_step_start', 'start_workflow_conditional_control', 10, 5 );
+function start_workflow_conditional_control( $step_id, $entry_id, $form_id, $step_status, $step ): void {
+	$delay_view_approval = $step->__get( 'delay_workflow_checkbox' );
+
+	if ( $delay_view_approval ) {
+		$entry  = GFAPI::get_entry( $entry_id );
+		$api    = new Gravity_Flow_API( $form_id );
+		$status = $api->cancel_workflow( $entry );
+		if ( $status ) {
+			gravity_flow()->add_timeline_note( $entry_id, 'Initial workflow cancelled. Set to start on View approval.' );
+		}
+	}
+}
+
+
+add_filter( 'gravityflow_next_step', 'gravityflow_next_step_start_control', 10, 4 );
+function gravityflow_next_step_start_control( $step, $current_step, $entry, $steps ) {
+	if ( $current_step->get_type() == 'workflow_start' ) {
+		$delay_view_approval = $current_step->__get( 'delay_workflow_checkbox' );
+		if ( $delay_view_approval ) {
+			$step = false;
+		}
+	}
+
+	return $step;
+}
+
+//to start workflow on approval
+add_action( 'gravityview/approve_entries/approved', 'restart_workflow_on_approval', 10, 1 );
+function restart_workflow_on_approval( $entry_id ) {
+	$entry = GFAPI::get_entry( $entry_id );
+
+	manual_start_workflow( $entry, 'delay_workflow_checkbox' );
+}
+
+//to restart workflow on subscription payment
+add_action( 'gform_post_add_subscription_payment', 'restart_workflow_on_subscription_payment', 10, 2 );
+function restart_workflow_on_subscription_payment( $entry, $action ): void {
+	if ( $action['type'] == 'add_subscription_payment' ) { //check right action happened
+		manual_start_workflow( $entry, 'restart_workflow_checkbox' );
+	}
+}
+
+function manual_start_workflow( $entry, $checkbox_name ) {
+	$form_id         = $entry['form_id'];
+	$api             = new Gravity_Flow_API( $form_id );
+	$workflow_status = $api->get_status( $entry );
+    $is_checkbox_checked = gravity_flow()->get_workflow_start_step()->__get($checkbox_name); //check checkbox is currently checked
+
+	if ( 'complete' == $workflow_status && $is_checkbox_checked) {
+		$steps = $api->get_steps();
+		array_shift( $steps );
+		$first_step = $steps[0];
+
+		if ( $first_step ) {
+            $restart_reason = $checkbox_name === 'restart_workflow_checkbox' ? 'subscription payment' : 'Gravity View Approval';
+			gravity_flow()->add_timeline_note( $entry['id'], "Workflow started because of $restart_reason." );
+			$api->send_to_step( $entry, $first_step->get_id() );
+		}
+	}
+}
