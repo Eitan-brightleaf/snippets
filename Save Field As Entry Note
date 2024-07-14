@@ -1,0 +1,11 @@
+add_action('gform_after_submission',function ($entry,$form){
+        
+	$id_array[Form_ID] = array('note_entry_id_field' => id ,'note_content_id_field' => id); //replace Form_ID and id's with relavent id's
+
+	if (in_array($form['id'],array_keys($id_array))){
+		$note_entry_id = $entry[$id_array[$form['id']]['note_entry_id_field']];
+		$note_content = $entry[$id_array[$form['id']]['note_content_id_field']];
+        $user = get_user_by('id',$entry['created_by']);
+		$result = GFAPI::add_note($note_entry_id,$entry['created_by'],$user->display_name,$note_content);
+	}
+},10,2);
