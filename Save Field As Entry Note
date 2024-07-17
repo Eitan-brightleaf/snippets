@@ -8,7 +8,7 @@ add_filter('gravityflow_step_settings_fields',function ($settings, $current_step
                 break;
         }
         $checkbox = array(
-	        'name' => 'entry_note',
+	        'name' => 'maybe_save_entry_note',
 	        'label' => 'Entry Note?',
 	        'type' => 'checkbox',
             'tooltip' => 'If you would like to store a field on this form as an entry note in the selected entry.',
@@ -30,7 +30,7 @@ add_filter('gravityflow_step_settings_fields',function ($settings, $current_step
 		        'live' => true,
 		        'fields' => array(
 			        array(
-                     'field' => 'entry_note',
+                     'field' => 'maybe_save_entry_note',
                      'values' => [1]
 			        )
 		        )
@@ -42,3 +42,13 @@ add_filter('gravityflow_step_settings_fields',function ($settings, $current_step
     return $settings;
 
 },10,2);
+
+add_action('gravityflow_step_start',function ($step_id, $entry_id, $form_id, $status, $step){
+
+    $maybe_add_entry_note = $step-> __get('field_as_entry_note');
+
+    if ($maybe_add_entry_note){
+
+    }
+
+},10,5);
