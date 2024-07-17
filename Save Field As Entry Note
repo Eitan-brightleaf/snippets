@@ -1,11 +1,44 @@
-add_action('gform_after_submission',function ($entry,$form){
-        
-	$id_array[Form_ID] = array('note_entry_id_field' => id ,'note_content_id_field' => id); //replace Form_ID and id's with relavent id's
+add_filter('gravityflow_step_settings_fields',function ($settings, $current_step_id){
 
-	if (in_array($form['id'],array_keys($id_array))){
-		$note_entry_id = $entry[$id_array[$form['id']]['note_entry_id_field']];
-		$note_content = $entry[$id_array[$form['id']]['note_content_id_field']];
-        $user = get_user_by('id',$entry['created_by']);
-		$result = GFAPI::add_note($note_entry_id,$entry['created_by'],$user->display_name,$note_content);
-	}
+    if (rgars($settings, '1/title') == 'New Entry' || rgars($settings,'1/title') == 'Update an Entry'){
+	    $desired_index = -1;
+        for ( $i = 0; $i < count($settings[1]['fields']); $i ++ )
+            if ($settings[1]['fields'][$i]['name'] == 'destination_complete'){
+                $desired_index = $i;
+                break;
+        }
+        $checkbox = array(
+	        'name' => 'entry_note',
+	        'label' => 'Entry Note?',
+	        'type' => 'checkbox',
+            'tooltip' => 'If you would like to store a field on this form as an entry note in the selected entry.',
+	        'choices' => array(
+		        array(
+			        'name' => 'field_as_entry_note',
+			        'label' => "",
+		        )
+            )
+        );
+        array_splice($settings[1]['fields'],$desired_index,0,[$checkbox]);
+        $desired_index++;
+
+        $field_select = array(
+	        'name' => 'field_for_entry_note',
+	        'label' => 'Select a field to be saved as the entry note',
+	        'type' =>  'field_select',
+	        'dependency' => array(
+		        'live' => true,
+		        'fields' => array(
+			        array(
+                     'field' => 'entry_note',
+                     'values' => [1]
+			        )
+		        )
+	        )
+        );
+        array_splice($settings[1]['fields'],$desired_index,0,[$field_select]);
+    }
+
+    return $settings;
+
 },10,2);
