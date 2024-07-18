@@ -1,0 +1,47 @@
+add_filter( 'gravityflow_step_settings_fields', function ( $settings, $current_step_id ) {
+
+	if ( rgars( $settings, '1/title' ) == 'New Entry' || rgars( $settings, '1/title' ) == 'Update an Entry' ) {
+		$desired_index = - 1;
+		for ( $i = 0; $i < count( $settings[1]['fields'] ); $i ++ ) {
+			if ( $settings[1]['fields'][ $i ]['name'] == 'destination_complete' ) {
+				$desired_index = $i;
+				break;
+			}
+		}
+
+		$field_select = array(
+			'name'       => 'field_for_entry_note',
+			'label'      => 'Select a field to be saved as the entry note',
+			'type'       => 'field_select',
+		);
+		array_splice( $settings[1]['fields'], $desired_index, 0, [ $field_select ] );
+	}
+
+	return $settings;
+
+}, 10, 2 );
+
+function send_note( $entry, $step, $note_entry_id ): void {
+	$user_id = $entry['created_by'];
+	$user = get_user_by('id',$user_id);
+	$user_name = $user->display_name;
+
+	$field_as_note_id = $step->__get( 'field_for_entry_note' );
+	$note = $entry[$field_as_note_id];
+
+	GFAPI::add_note($note_entry_id,$user_id,$user_name,$note);
+}
+
+add_action('gravityflowformconnector_post_new_entry',function ($new_entry_id,$entry,$form,$step){
+    send_note($entry,$step,$new_entry_id);
+},10,4);
+add_action( 'gravityflow_step_start', function ( $step_id, $entry_id, $form_id, $status, $step ) {
+	if ($step->get_type() == 'update_entry'){
+
+		$entry = GFAPI::get_entry($entry_id);
+        $new_entry_field_id = $step->__get( 'update_entry_id' );
+        $new_entry_id = $entry[$new_entry_field_id];
+        send_note($entry,$step,$new_entry_id);
+    }
+
+}, 10, 5 );
