@@ -28,8 +28,8 @@ function add_note( $entry, $step, $note_entry_id ): void {
 	$user_name = $user->display_name;
 
 	$note_text = $step->__get( 'field_for_entry_note' );
-    $form = GFAPI::get_form($entry['form_id']);
-    $note = GFCommon::replace_variables($note_text, $form, $entry);
+    	$form = GFAPI::get_form($entry['form_id']);
+    	$note = GFCommon::replace_variables($note_text, $form, $entry);
 	GFAPI::add_note($note_entry_id,$user_id,$user_name,$note);
 }
 
