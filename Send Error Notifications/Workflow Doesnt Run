@@ -10,7 +10,7 @@ add_action('gform_after_submission',function ($entry,$form){
 			$user_name = $user->display_name;
 			$user_email = $user->user_email;
 
-			$to = 'gil@brightleafc.com';
+			$to = ''; //add email here
 			$subject = 'Workflow failed to start';
 			$message = "Time: $time" . PHP_EOL . "URL: $url" . PHP_EOL . "Form: $form_title" . PHP_EOL . "User: $user_name" . PHP_EOL . "User Email: $user_email";
 			wp_mail($to,$subject,$message);
