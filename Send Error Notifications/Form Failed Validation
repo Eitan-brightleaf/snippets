@@ -8,12 +8,12 @@ add_action('gform_post_process',function ($form){
 		$time = date(DATE_RSS);
 		$form_title = $form['title'];
 		$errors = implode(PHP_EOL,$failed_fields);
-		$to = 'gil@brightleafc.com';
+		$to = ''; //add email here
 		$subject = 'Form Failed Validation';
 		$user = get_currentuserinfo();
 		$user_name = $user->display_name;
 		$user_email = $user->user_email;
-        $url = RGFormsModel::get_current_page_url();
+        	$url = RGFormsModel::get_current_page_url();
 
 		$message = "Time: $time" . PHP_EOL . "URL: $url" . PHP_EOL . "Form: $form_title" . PHP_EOL . "User: $user_name" . PHP_EOL . "User Email: $user_email" . PHP_EOL . $errors;
 		wp_mail($to,$subject,$message);
