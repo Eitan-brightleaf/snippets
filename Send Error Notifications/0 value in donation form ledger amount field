@@ -1,0 +1,36 @@
+add_action('gform_after_submission',function ($entry,$form){
+	$form_ids = [
+		30 => [
+			4, 8, 11
+		],
+		60 => [
+			13, 16
+		],
+	];
+
+    if (in_array($form['id'],array_keys($form_ids))){
+	    foreach ( $form_ids[$form['id']] as $field_id ) {
+            if (empty($entry[$field_id])){
+                foreach ($form['fields'] as $field){
+                    if ($field['id'] == $field_id){
+                        $warning[] = 'Field ' . $field['label'] . ' with field id of ' . $field_id . ' has a value of 0.';
+                    }
+                }
+            }
+        }
+        if (!empty($warning)){
+	        $time = date(DATE_RSS);
+	        $form_title = $form['title'];
+	        $errors = implode(PHP_EOL,$warning);
+	        $to = 'gil@brightleafc.com';
+	        $subject = '0 value in donation form ledger amount field';
+	        $user = get_currentuserinfo();
+	        $user_name = $user->display_name;
+	        $user_email = $user->user_email;
+	        $url = $entry['source_url'];
+
+	        $message = "Time: $time" . PHP_EOL . "URL: $url" . PHP_EOL . "Form: $form_title" . PHP_EOL . "User: $user_name" . PHP_EOL . "User Email: $user_email" . PHP_EOL . $errors;
+	        wp_mail($to,$subject,$message);
+        }
+    }
+},10,2);
