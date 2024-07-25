@@ -1,0 +1,19 @@
+add_action('gform_send_email_failed',function ($error, $email, $entry){
+
+	$to = 'gil@brightleafc.com';
+    $subject = 'Email failed to send';
+	$time = date(DATE_RSS);
+    $form = GFAPI::get_form($entry['form_id']);
+	$form_title = $form['title'];
+	$user = get_currentuserinfo();
+	$user_name = $user->display_name;
+	$user_email = $user->user_email;
+	$url = $entry['source_url'];
+    $email_content = implode("; " , $email);
+
+
+	$message = "Time: $time" . PHP_EOL . "URL: $url" . PHP_EOL . "Form: $form_title" . PHP_EOL . "User: $user_name" . PHP_EOL . "User Email: $user_email" . PHP_EOL . 'Error: ' .
+               $error->get_error_message() . PHP_EOL . "Email content: $email_content";
+
+	wp_mail($to,$subject,$message);
+},10,3);
