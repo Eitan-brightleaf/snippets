@@ -21,4 +21,4 @@ add_action('gform_after_submission',function ($entry,$form){
 			wp_mail($to,$subject,$message);
 		}
 	}
-},10,2)
+},10,2);
