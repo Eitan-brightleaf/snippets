@@ -136,11 +136,11 @@ add_filter(
 					'key'   => 'workflow_final_status',
 					'value' => 'pending',
 				);
-				
+
 				$search_criteria['field_filters'][] = array(
-					'key'      => 'gpnf_entry_parent',
+					'key'      => 'workflow_step',
 					'operator' => 'isnot',
-					'value'    => false,
+					'value'    => '0',
 				);
 
 				// subtract pending amount.
@@ -163,10 +163,11 @@ add_filter(
 				}
 
 				foreach ( $child_entries as $child_entry ) {
+					// $new_parent = GFAPI::get_entry( $child_entry['gpnf_entry_parent'] );
 					$pending_disbursals += $child_entry[ $field['id'] ];
 				}
 
-				$balance = ( $ledger_amount - $pending_disbursals ) + $batch_value;
+				$balance = ( $ledger_amount - $pending_disbursals );
 
 				if ( $value > $balance ) {
 					$field->failed_validation      = true;
