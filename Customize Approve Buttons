@@ -1,0 +1,52 @@
+add_filter(
+	'gravityflow_step_settings_fields',
+	function ( $settings ) {
+
+		if ( rgars( $settings, '1/title' ) === 'Approval' ) {
+			$index = array_search( 'expiration', array_column( $settings[1]['fields'], 'name' ), true );
+			$index++;
+
+			$approval_text = array(
+				'name'    => 'custom_approval_text',
+				'label'   => 'Custom Approval Button Text',
+				'type'    => 'text',
+				'class'   => 'merge-tag-support mt-position-right',
+				'tooltip' => 'Enter text that you would like to display instead of "Approve" for this step.',
+			);
+			array_splice( $settings[1]['fields'], $index, 0, array( $approval_text ) );
+
+            $index++;
+
+			$rejection_text = array(
+				'name'    => 'custom_rejection_text',
+				'label'   => 'Custom Rejection Button Text',
+				'type'    => 'text',
+				'class'   => 'merge-tag-support mt-position-right',
+				'tooltip' => 'Enter text that you would like to display instead of "Reject" for this step.',
+			);
+			array_splice( $settings[1]['fields'], $index, 0, array( $rejection_text ) );
+		}
+
+		return $settings;
+	},
+	10,
+	2
+);
+
+add_filter(
+	'gravityflow_approve_label_workflow_detail',
+	function ( $approve_label, $step ) {
+		return empty($step->__get( 'custom_approval_text' )) ? $approve_label : $step->__get( 'custom_approval_text' );
+	},
+	10,
+	2
+);
+
+add_filter(
+	'gravityflow_reject_label_workflow_detail',
+	function ( $reject_label, $step ) {
+        return empty($step->__get( 'custom_rejection_text' )) ? $reject_label : $step->__get( 'custom_rejection_text' );
+	},
+	10,
+	2
+);
