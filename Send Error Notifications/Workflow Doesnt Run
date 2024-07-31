@@ -1,24 +1,43 @@
-add_action('gform_after_submission',function ($entry,$form){
-	$start_step = gravity_flow()->get_workflow_start_step($form['id']);
-	if ($start_step && $start_step->is_active() && !$start_step->is_queued() && !$start_step->__get('delay_workflow_checkbox')){
+function check_if_workflow_ran( $entry, $form ) {
+	$start_step = gravity_flow()->get_workflow_start_step( $form['id'] );
+	if ( $start_step && $start_step->is_active() && ! $start_step->is_queued() && ! $start_step->__get( 'delay_workflow_checkbox' ) ) {
 		$step_id = $start_step->get_id();
-		if ($entry["workflow_step_status_$step_id"] !== 'complete' && $entry["workflow_step_status_$step_id"] !== 'pending'){
+		if ( 'complete' !== $entry[ "workflow_step_status_$step_id" ] && 'pending' !== $entry[ "workflow_step_status_$step_id" ] ) {
 
 			$timestamp = time();
-			$time = new DateTime("now",new DateTimeZone('Asia/Jerusalem'));
-			$time->setTimestamp($timestamp);
-			$time = $time->format('m/d/Y g:i A');
-            
-			$url = GFCommon::replace_variables("{embed_url}",$form,$entry);
+			$time      = new DateTime( 'now', new DateTimeZone( 'Asia/Jerusalem' ) );
+			$time->setTimestamp( $timestamp );
+			$time = $time->format( 'm/d/Y g:i A' );
+
+			$url        = GFCommon::replace_variables( '{embed_url}', $form, $entry );
 			$form_title = $form['title'];
-			$user = get_user_by('id',$entry['created_by']);
-			$user_name = $user->display_name;
+			$user       = get_user_by( 'id', $entry['created_by'] );
+			$user_name  = $user->display_name;
 			$user_email = $user->user_email;
 
-			$to = ''; //add email here
+			$to      = ''; // add email here.
 			$subject = "Workflow failed to start for form $form_title at $time";
 			$message = "Time: $time" . PHP_EOL . "URL: $url" . PHP_EOL . "Form: $form_title" . PHP_EOL . "User: $user_name" . PHP_EOL . "User Email: $user_email";
-			wp_mail($to,$subject,$message);
+			wp_mail( $to, $subject, $message );
 		}
 	}
-},10,2);
+}
+
+add_action(
+	'gform_after_submission',
+	function ( $entry, $form ) {
+		if ( ! isset( $entry['gpnf_entry_parent_form'] ) ) {
+			foreach ( $form['fields'] as $field ) {
+				if ( $field instanceof GP_Field_Nested_Form ) {
+					$child_form_id = $field->gpnfForm;
+					$child_form    = GFAPI::get_form( $child_form_id );
+					check_if_workflow_ran( $entry, $child_form );
+				}
+			}
+
+			check_if_workflow_ran( $entry, $form );
+		}
+	},
+	10,
+	2
+);
