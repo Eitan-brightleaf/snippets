@@ -1,5 +1,5 @@
 function check_if_workflow_ran( $entry, $form ) {
-	$start_step = gravity_flow()->get_workflow_start_step( $form['id'] );
+	$start_step = gravity_flow()->get_workflow_start_step( $form['id'], $entry );
 	if ( $start_step && $start_step->is_active() && ! $start_step->is_queued() && ! $start_step->__get( 'delay_workflow_checkbox' ) ) {
 		$step_id = $start_step->get_id();
 		if ( 'complete' !== $entry[ "workflow_step_status_$step_id" ] && 'pending' !== $entry[ "workflow_step_status_$step_id" ] ) {
@@ -23,15 +23,24 @@ function check_if_workflow_ran( $entry, $form ) {
 	}
 }
 
+
+
 add_action(
 	'gform_after_submission',
 	function ( $entry, $form ) {
-		if ( ! isset( $entry['gpnf_entry_parent_form'] ) ) {
+		if ( ! $entry['gpnf_entry_parent_form'] ) {
 			foreach ( $form['fields'] as $field ) {
 				if ( $field instanceof GP_Field_Nested_Form ) {
+
 					$child_form_id = $field->gpnfForm;
-					$child_form    = GFAPI::get_form( $child_form_id );
-					check_if_workflow_ran( $entry, $child_form );
+                    $child_form    = GFAPI::get_form( $child_form_id );
+
+                    $parent_entry = new GPNF_Entry( $entry );
+                    $entries = $parent_entry->get_child_entries();
+
+                    foreach ($entries as $child_entry){
+                        check_if_workflow_ran( $child_entry, $child_form );
+                    }
 				}
 			}
 
