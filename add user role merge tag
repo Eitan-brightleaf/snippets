@@ -1,0 +1,31 @@
+add_filter(
+	'gform_custom_merge_tags',
+	function ($merge_tags) {
+		$merge_tags[] = array(
+			'label' => 'User Role',
+			'tag'   => '{user_role}',
+		);
+
+		return $merge_tags;
+	}
+);
+
+add_filter(
+	'gform_replace_merge_tags',
+	function ( $text ) {
+		if ( '{user_role}' !== $text){
+			return $text;
+		}
+		global $current_user;
+		$values = $current_user->get( 'wp_capabilities' );
+
+		$roles = [];
+		foreach ($values as $role => $enabled){
+			if ($enabled){
+				$roles[] = $role;
+			}
+		}
+		//if you would like to change the seperator of multiple roles change whats in between the single quotes in the line below
+		return implode(', ', $roles); 
+	}
+);
