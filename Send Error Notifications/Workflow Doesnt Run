@@ -33,20 +33,20 @@ add_action(
 				if ( $field instanceof GP_Field_Nested_Form ) {
 
 					$child_form_id = $field->gpnfForm;
-                    $child_form    = GFAPI::get_form( $child_form_id );
+					$child_form    = GFAPI::get_form( $child_form_id );
 
-                    $parent_entry = new GPNF_Entry( $entry );
-                    $entries = $parent_entry->get_child_entries();
+					$parent_entry = new GPNF_Entry( $entry );
+					$entries      = $parent_entry->get_child_entries();
 
-                    foreach ($entries as $child_entry){
-                        check_if_workflow_ran( $child_entry, $child_form );
-                    }
+					foreach ( $entries as $child_entry ) {
+						check_if_workflow_ran( $child_entry, $child_form );
+					}
 				}
 			}
 
 			check_if_workflow_ran( $entry, $form );
 		}
 	},
-	10,
+	11,
 	2
 );
