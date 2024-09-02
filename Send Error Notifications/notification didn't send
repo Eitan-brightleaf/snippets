@@ -14,11 +14,17 @@ add_action('gform_send_email_failed',function ($error, $email, $entry){
 	$user_name = $user->display_name;
 	$user_email = $user->user_email;
 	$url = $entry['source_url'];
-	$email_content = implode("; " , $email);
+	$email_content = "";
+	foreach ($email as $key => $value){
+        if ( is_array( $value ) ){
+            $value = implode( ', ', $value );
+        }
+        $email_content .= $key . ": " . $value . PHP_EOL;
+    }
 
 
 	$message = "Time: $time" . PHP_EOL . "URL: $url" . PHP_EOL . "Form: $form_title" . PHP_EOL . "User: $user_name" . PHP_EOL . "User Email: $user_email" . PHP_EOL . 'Error: ' .
-	           $error->get_error_message() . PHP_EOL . "Email content: $email_content";
+	           $error->get_error_message() . PHP_EOL . 'Email content:' . PHP_EOL . $email_content;
 
 	wp_mail($to,$subject,$message);
 },10,3);
