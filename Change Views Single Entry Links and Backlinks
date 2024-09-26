@@ -43,3 +43,21 @@ add_filter(
 	},
 	10,
 	3 );
+
+add_filter( 'gravityview/widget/search/form/action', function ($url) {
+	$view_ids = [
+		1103 => '#uagb-tabs__tab1',
+		1250 => '#uagb-tabs__tab2',
+		1101 => '#uagb-tabs__tab1',
+		1257 => '#uagb-tabs__tab2'
+	];
+    foreach ( $view_ids as $view_id => $label ) {
+        if ( str_contains($url, '#gv-view-'.$view_id)){
+            $index = strpos($url,'#');
+            $url = substr_replace($url,'',$index);
+            $url .= $label;
+            break;
+        }
+    }
+    return $url;
+},11);
