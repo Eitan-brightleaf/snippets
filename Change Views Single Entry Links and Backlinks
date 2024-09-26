@@ -1,0 +1,45 @@
+add_action( 'gravityview/template/links/back/url', 'gv_change_back_link', 10, 2 );
+
+function gv_change_back_link( $href = '', $context = null ) {
+
+    $view_ids = [
+       1103 => 'https://example.com/dashboard/adminparents/#uagb-tabs__tab1',
+       1250 => 'https://example.com/dashboard/adminparents/#uagb-tabs__tab2',
+       1101 => 'https://example.com/dashboard/adminstudents/#uagb-tabs__tab1',
+	   1257 => 'https://example.com/dashboard/adminstudents/#uagb-tabs__tab2'
+    ];
+
+    if ( in_array( $context->view->ID, array_keys( $view_ids ) ) ) {
+
+       return $view_ids[$context->view->ID];
+
+    }
+
+
+    return $href;
+}
+
+add_filter(
+	'gravityview/template/field/entry_link',
+	function ( $output, $permalink, $context ) {
+		$view_ids = [
+			1103 => '#uagb-tabs__tab1',
+			1250 => '#uagb-tabs__tab2',
+			1101 => '#uagb-tabs__tab1',
+			1257 => '#uagb-tabs__tab2'
+		];
+        $view = $context->view;
+        $post = $view->get_post();
+        $id   = $post->ID;
+		if ( in_array( $id, array_keys( $view_ids ) ) ) {
+			$new_permalink = substr_replace( $permalink, "", strpos( $permalink, '?' ) );
+
+			$new_permalink = $new_permalink . $view_ids[ $id ];
+
+			$output = str_replace( $permalink, $new_permalink, $output );
+		}
+
+		return $output;
+	},
+	10,
+	3 );
