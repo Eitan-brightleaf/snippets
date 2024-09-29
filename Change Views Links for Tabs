@@ -3,8 +3,10 @@ add_action( 'gravityview/template/links/back/url', 'gv_change_back_link', 10, 2 
 function gv_change_back_link( $href = '', $context = null ) {
 
     $view_ids = [
+		341 => 'https://example.com/dashboard/adminparents/#uagb-tabs__tab0',
        1103 => 'https://example.com/dashboard/adminparents/#uagb-tabs__tab1',
        1250 => 'https://example.com/dashboard/adminparents/#uagb-tabs__tab2',
+		230 => 'https://example.com/dashboard/adminstudents/#uagb-tabs__tab0',
        1101 => 'https://example.com/dashboard/adminstudents/#uagb-tabs__tab1',
 	   1257 => 'https://example.com/dashboard/adminstudents/#uagb-tabs__tab2'
     ];
@@ -23,8 +25,10 @@ add_filter(
 	'gravityview/template/field/entry_link',
 	function ( $output, $permalink, $context ) {
 		$view_ids = [
+			 341 => '#uagb-tabs__tab0',
 			1103 => '#uagb-tabs__tab1',
 			1250 => '#uagb-tabs__tab2',
+		     230 => '#uagb-tabs__tab0',
 			1101 => '#uagb-tabs__tab1',
 			1257 => '#uagb-tabs__tab2'
 		];
@@ -46,8 +50,10 @@ add_filter(
 
 add_filter( 'gravityview/widget/search/form/action', function ($url) {
 	$view_ids = [
+		 341 => '#uagb-tabs__tab0',
 		1103 => '#uagb-tabs__tab1',
 		1250 => '#uagb-tabs__tab2',
+		 230 => '#uagb-tabs__tab0',
 		1101 => '#uagb-tabs__tab1',
 		1257 => '#uagb-tabs__tab2'
 	];
@@ -61,3 +67,19 @@ add_filter( 'gravityview/widget/search/form/action', function ($url) {
     }
     return $url;
 },11);
+
+add_filter( 'gravityview/edit/link', function( $url ) {
+    $view_ids = [
+	341 => '#uagb-tabs__tab0',
+        1103 => '#uagb-tabs__tab1',
+        1250 => '#uagb-tabs__tab2',
+	230 => '#uagb-tabs__tab0',
+        1101 => '#uagb-tabs__tab1',
+        1257 => '#uagb-tabs__tab2'
+    ];
+    $id = $post->ID;
+    if ( in_array( $id, array_keys( $view_ids ) ) ) {
+        $url = $url . $view_ids[ $id ];
+    }
+    return $url;
+}, 11);
