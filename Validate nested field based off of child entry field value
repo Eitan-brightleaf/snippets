@@ -1,0 +1,38 @@
+add_filter(
+    'gform_field_validation',
+    function( $result, $value, $form, $field ) {
+
+        $form_config[71] = [  // Replace with your parent form ID
+            'nested_field_id' => 1,        // Replace with fieldID of nested form
+            'child_field_id'  => 1,      // Replace with your child form field ID
+            'required_value'  => 'test',// Replace with the string value to validate against
+        ]; //copy this with new id's for new forms
+
+        $form_id = rgar( $form, 'id' );
+        if ( in_array( $form_id, array_keys( $form_config ), true) ){
+            if ( $field['id'] === $form_config[$form_id]['nested_field_id'] ) {
+                $child_entry_ids = explode( ',', $value);
+                $child_entries = [];
+                foreach ($child_entry_ids as $child_entry_id) {
+                    $child_entries[] = GFAPI::get_entry( intval( $child_entry_id ) );
+                }
+                $child_field_id = $form_config[$form_id]['child_field_id'];
+                $required_value_found = false;
+                $required_value = $form_config[$form_id]['required_value'];
+                foreach ( $child_entries as $child_entry ) {
+                    if ( $child_entry[$child_field_id] === $required_value ) {
+                        $required_value_found = true;
+                        break;
+                    }
+                }
+                if ( ! $required_value_found ){
+                    $result['is_valid'] = false;
+                    $result['message'] = "Validation failed. At least one entry should contain $required_value.";
+                }
+            }
+        }
+
+        return $result;
+    },
+    10,
+    4);
