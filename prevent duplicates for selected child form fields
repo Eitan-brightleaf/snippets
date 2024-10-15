@@ -1,0 +1,57 @@
+add_filter( 'gform_field_validation', function ( $validation_result, $value, $form, $field ) {
+
+    // $forms_and_fields[child form id]
+	$forms_and_fields[66] = [
+		//child field id => 'message to display',
+		4 => 'message to display',
+		2 => 'message to display',
+        3 => 'message to display'
+	];
+
+	if ( in_array( $form['id'], array_keys( $forms_and_fields ) ) ) {
+		if ( in_array( $field['id'], array_keys( $forms_and_fields[ $form['id'] ] ) ) ) {
+
+			$nested_form    = new GP_Nested_Forms( $form );
+			$parent_id      = $nested_form->get_parent_form_id();
+			$parent_form    = GFAPI::get_form( $parent_id );
+			$parent_form    = new GP_Nested_Forms( $parent_form );
+			$session        = new GPNF_Session( $parent_id );
+			$entry_id_array = $session->get_valid_entry_ids( $session->get_cookie()['nested_entries'] );
+			$entries_array  = array();
+			foreach ( $entry_id_array as $entry_id ) {
+				if ( is_array( $entry_id ) ) {
+					foreach ( $entry_id as $id ) {
+						$entries_array[] = $id;
+					}
+				} else {
+					$entries_array[] = $entry_id;
+				}
+			}
+			$entries = $parent_form->get_entries( $entries_array );
+            foreach ( $entries as $entry ) {
+                if ( $field['type'] === 'number' && $value === $entry[$field['id']] ) {
+                    $validation_result['is_valid'] = false;
+                    $validation_result['message'] = $forms_and_fields[ $form['id'] ][ $field['id'] ];
+                    break;
+                } elseif ( $field['type'] === 'name'){
+                    $field_id = $field['id'];
+                    if ($value[$field_id.'3'] === $entry[$field_id.'3'] && $value[$field_id.'6'] === $entry[$field_id.'6']){
+                        $validation_result['is_valid'] = false;
+                        $validation_result['message'] = $forms_and_fields[ $form['id'] ][ $field['id'] ];
+                        break;
+                    }
+                } elseif ( $field['type'] === 'date' ){
+                    $value_time = strtotime( $value );
+                    $entry_time = strtotime( $entry[$field['id']] );
+                    if ( $value_time === $entry_time ) {
+                        $validation_result['is_valid'] = false;
+                        $validation_result['message'] = $forms_and_fields[ $form['id'] ][ $field['id'] ];
+                        break;
+                    }
+                }
+            }
+		}
+	}
+
+	return $validation_result;
+}, 10, 4 );
