@@ -14,7 +14,7 @@ $('#gform_submit_button_'+GFFORMID).click((event) => {
             event.preventDefault();
         }
         else {
-            $('form').submit();
+            $('#gform_'+GFFORMID).submit();
         }
     }
 });
