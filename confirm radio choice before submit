@@ -13,5 +13,8 @@ $(':submit').click((event) => {
         if ( ! confirmed ) {
             event.preventDefault();
         }
+        else {
+            $('form').submit();
+        }
     }
 });
