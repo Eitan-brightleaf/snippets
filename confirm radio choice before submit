@@ -9,8 +9,8 @@ $(':submit').click((event) => {
         mesg = choices[radioVal];
     }
     if (mesg){
-        let confirm = window.confirm(mesg);
-        if ( ! confirm ) {
+        let confirmed = window.confirm(mesg);
+        if ( ! confirmed ) {
             event.preventDefault();
         }
     }
