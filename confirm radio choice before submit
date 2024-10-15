@@ -1,0 +1,17 @@
+let choices = {
+    'First Choice': "Are you sure you want to submit First Choice?", //change to choices and message for choice
+    'Second Choice' : 'Are you sure you want to submit Second Choice?',
+}
+$(':submit').click((event) => {
+    let radioVal = $('input[name="input_3"]:checked').val(); // change to name of radio button html element
+    let mesg = '';
+    if (radioVal in choices){
+        mesg = choices[radioVal];
+    }
+    if (mesg){
+        let confirm = window.confirm(mesg);
+        if ( ! confirm ) {
+            event.preventDefault();
+        }
+    }
+});
