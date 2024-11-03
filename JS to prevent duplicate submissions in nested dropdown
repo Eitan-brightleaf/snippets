@@ -1,0 +1,14 @@
+//replace with parent form id
+const parent_form_id = 78;
+//replace with dropdown field id
+const dropdown_field_id = 1;
+let entries = window[ `GPNestedForms_${parent_form_id}_${dropdown_field_id}`].entries;
+$(`#input_${GFFORMID}_${dropdown_field_id} > option`).each(function () {
+	let duplicate = false;
+    let option = this;
+    entries.forEach(function (entry) {
+    	if ( entry[1].label === option.text ){
+        	option.disabled = true;
+        }
+	});
+});
