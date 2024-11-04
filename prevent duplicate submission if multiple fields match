@@ -1,0 +1,71 @@
+add_filter( 'gform_validation', function ( $validation_result ) {
+
+    $form = $validation_result['form'];
+
+    // $forms_and_fields[child form id]
+    $forms_and_fields[77] = [
+        'name_field_id' => 5,
+        'num_field_id'  => 3,
+        'date_field_id' => 6,
+    ];
+
+
+    if ( in_array( $form['id'], array_keys( $forms_and_fields ) ) ) {
+
+        $name_id = $forms_and_fields[ $form['id'] ]['name_field_id'];
+        $num_id  = $forms_and_fields[ $form['id'] ]['num_field_id'];
+        $date_id = $forms_and_fields[ $form['id'] ]['date_field_id'];
+
+        $search_criteria = [];
+        $search_criteria['status'] = 'active';
+
+        $search_criteria['field_filters'][] = [
+            'key' => $num_id . '',
+            'value' => rgpost('input_' . $num_id),
+        ];
+
+        $search_criteria['field_filters'][] = [
+            'key' => $name_id . '.3',
+            'value' => rgpost('input_' . $name_id . '_3'),
+        ];
+
+        $search_criteria['field_filters'][] = [
+            'key' => $name_id . '.6',
+            'value' => rgpost('input_' . $name_id . '_6'),
+        ];
+
+        $search_criteria['field_filters'][] = [
+            'key' => $date_id . '',
+            'value' => date('Y-m-d',strtotime(rgpost('input_' . $date_id))),
+        ];
+
+        $entries = GFAPI::get_entries( $form['id'], $search_criteria );
+
+        if ( count( $entries ) > 0 ) {
+            $validation_result['is_valid'] = false;
+
+            $fields = &$form['fields'];
+
+            $field_ids = array_column( $fields, 'id' );
+
+            $num_field_index = array_search( $num_id, $field_ids );
+            $name_field_index = array_search( $name_id, $field_ids );
+            $date_field_index = array_search( $date_id, $field_ids );
+
+            $fields[ $num_field_index ]->failed_validation = true;
+            //customize message
+            $fields[ $num_field_index ]->validation_message = 'message';
+
+            $fields[ $name_field_index ]->failed_validation = true;
+            //custmize message
+            $fields[ $name_field_index ]->validation_message = 'message';
+
+            $fields[ $date_field_index ]->failed_validation = true;
+            //custmize message
+            $fields[ $date_field_index ]->validation_message = 'message';
+        }
+    }
+
+    $validation_result['form'] = $form;
+    return $validation_result;
+} );
