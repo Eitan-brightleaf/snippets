@@ -1,0 +1,81 @@
+add_filter( 'gform_validation', function ( $validation_result ) {
+
+	function get_duplicate_keys(array $array): array {
+		$value_counts = [];
+		$duplicate_keys = [];
+
+		foreach ($array as $key => $value) {
+			if (isset($value_counts[$value])) {
+				if ($value_counts[$value]['count'] === 1) {
+					// First duplicate occurrence, store previous key
+					$duplicate_keys[] = $value_counts[$value]['first_key'];
+				}
+				// Every duplicate occurrence after the first, store current key
+				$duplicate_keys[] = $key;
+				$value_counts[$value]['count']++;
+			} else {
+				$value_counts[$value] = ['count' => 1, 'first_key' => $key];
+			}
+		}
+
+		return $duplicate_keys;
+	}
+
+	function is_multi_input_field( string $field_type ): bool {
+		return 'name' === $field_type || 'address' === $field_type || 'checkbox' === $field_type;
+	}
+
+	function get_values_with_key_pattern(array $array, string $id) {
+		$matching_values = [];
+		$pattern_regex = '/^input_' . $id . '_\d+$/';
+
+		foreach ($array as $key => $value) {
+			if (preg_match($pattern_regex, $key, $matches)) {
+				if ( ! empty( $value ) || $value === '0' || $value === 0 || $value === 0.0 ) {
+					$matching_values[] = $value;
+				}
+			}
+		}
+
+		return implode(' ', $matching_values);
+	}
+
+    $form = rgar( $validation_result, 'form' );
+    $form_id = rgar( $form, 'id' );
+    $fields = rgar( $form, 'fields' );
+    $field_ids = array_column( $fields, 'id' );
+
+    $duplicate_field_ids[63] = [
+		[ 21 => 'message', 23 => 'message', 27 =>'message' ],
+		[ 21 => 'message', 24 =>'message' ],
+        [ 25 => 'message', 26 =>'message' ]
+	];
+
+    if ( in_array( $form_id, array_keys($duplicate_field_ids), true ) ) {
+        foreach ( $duplicate_field_ids[$form_id] as $fields_list ) {
+            $values = [];
+            foreach ($fields_list as $field_id => $message) {
+                $field_type = $fields[array_search( $field_id, $field_ids )]['type'];
+                if ( is_multi_input_field( $field_type ) ) {
+                    $values[$field_id] = get_values_with_key_pattern( $_POST, $field_id );
+                } elseif ( ! empty( rgpost( 'input_' . $field_id ) ) ){
+                    $values[$field_id] = rgpost( 'input_' . $field_id );
+                }
+            }
+            $duplicate_keys = get_duplicate_keys( $values );
+            if ( ! empty( $duplicate_keys ) ) {
+                $validation_result['is_valid'] = false;
+                foreach ( $fields_list as $field_id => $message ) {
+                    if ( in_array( $field_id, $duplicate_keys, true ) ) {
+	                    $fields[array_search( $field_id, $field_ids )]->failed_validation = true;
+                        $fields[array_search( $field_id, $field_ids )]->validation_message = $message;
+                    }
+                }
+            }
+        }
+        $form['fields'] = $fields;
+        $validation_result['form'] = $form;
+    }
+
+    return $validation_result;
+});
