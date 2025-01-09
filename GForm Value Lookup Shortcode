@@ -1,0 +1,72 @@
+add_action( 'init', function () {
+    add_shortcode( 'gfsearch', 'gfsearch_shortcode' );
+});
+
+function gfsearch_shortcode( $atts, $content ) {
+    /**
+	 * Notes: for the target use 0 to search all forms or a form ID to search a specific form or an array of form IDs to search only the specified forms
+	 * In order to get all entries intead of the first use the all="" attribute and just make sure it's not empty (don't put 0 or just all="").
+	 * If you want to sort the entries use the sort_key, sort_direction, and sort_is_num.
+	 * sort_key: The field ID, entry property, or entry meta key to sort the results.
+	 * sort_direction: The direction to sort the results. Can be ASC, DESC, or RAND.
+	 * sort_is_num: Indicates if the values of the specified key are numeric.
+	 */ 
+	shortcode_atts( [
+		'target' => 0,
+		'search' => '',
+		'display' => '',
+		'all' => false,
+		'sort_key' => 'id',
+		'sort_direction' => 'DESC',
+		'sort_is_num' => true
+	], $atts );
+
+	$search_criteria                    = [];
+	$search_criteria['status']          = 'active';
+	$search_criteria['field_filters']   = [];
+    $search_criteria['field_filters'][] = [ 'key' => $atts['search'], 'value' => $content ];
+
+    $sorting = [
+        'key' => $atts['sort_key'],
+        'direction' => $atts['sort_direction'],
+        'is_numeric' => $atts['sort_is_num']
+    ];
+
+    $paging_offset = 0;
+	$total_count = 0;
+	$paging = [
+		'offset'    => $paging_offset,
+		'page_size' => $atts['all'] ? 25 : 1,
+	];
+
+    if ( strlen( $atts['target'] ) > 1 ) {
+	    $form_id = array_map('intval', explode(',', $atts['target']));
+    } else {
+        $form_id = intval( $atts['target'] );
+    }
+
+	$entries = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging, $total_count );
+
+    if ( $atts['all'] ) {
+	    while ( $total_count > count( $entries ) ) {
+		    $paging_offset += 25;
+		    $paging         = array(
+			    'offset'    => $paging_offset,
+			    'page_size' => 25,
+		    );
+		    $new_entries = GFAPI::get_entries( $form_id, $search_criteria, null, $paging, $total_count );
+		    array_push( $entries, ...$new_entries ); // $entries = array_merge( $entries, $new_entries );
+	    }
+    }
+
+    if ( empty( $entries ) ) {
+        return '';
+    }
+
+    $results = [];
+    foreach ( $entries as $entry ) {
+        $results[] = $entry[$atts['display']];
+    }
+
+	return implode( ', ', $results );
+}
