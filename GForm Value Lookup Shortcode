@@ -2,29 +2,66 @@ add_action( 'init', function () {
     add_shortcode( 'gfsearch', 'gfsearch_shortcode' );
 });
 
-function gfsearch_shortcode( $atts, $content ) {
+function gfsearch_shortcode( $atts, $content = null ): string {
     /**
-	 * Notes: for the target use 0 to search all forms or a form ID to search a specific form or an array of form IDs to search only the specified forms
-	 * In order to get all entries intead of the first use the all="" attribute and just make sure it's not empty (don't put 0 or just all="").
-	 * If you want to sort the entries use the sort_key, sort_direction, and sort_is_num.
-	 * sort_key: The field ID, entry property, or entry meta key to sort the results.
-	 * sort_direction: The direction to sort the results. Can be ASC, DESC, or RAND.
-	 * sort_is_num: Indicates if the values of the specified key are numeric.
-	 */ 
-	shortcode_atts( [
-		'target' => 0,
-		'search' => '',
-		'display' => '',
-		'all' => false,
-		'sort_key' => 'id',
-		'sort_direction' => 'DESC',
-		'sort_is_num' => true
-	], $atts );
+     * Notes: For the target use 0 to search all forms or a form ID to search a specific form or a comma separated list of form IDs to
+     * search the specified forms.
+	 * 
+	 * You can pass multiple id's to the search and display attributes, seperated by a comma, if you want to search or display multiple fields. If you are searching
+	 * for multiple fields enter the corresponding value as the content for the shortcode with each value to search for seperated by a comma. Make sure you have the
+	 * same amount of values as fields you are searching and make sure they are in the same order.
+	 * 
+	 * If you are searching for more than one value in the same entry you can use the search_mode attribute to determine if the entry must meet all the conditions
+	 * or not. Default is all conditions. If you pass in the value any (search_mode="any") then the result will be returned if any condition matches.
+     *
+     * If you would like to search for results where the value is greater or less than the provided search value use the greater_than or less_than attributes.
+	 * The attribute expects the field id first and then the number to filter by separated by a space and comma. For example greater_than="4, 500" will filter out 
+	 * all entries where field 4 has a value of less than 500.
+     *
+     * If you want to sort the entries use the sort_key, sort_direction, and sort_is_num.
+     * sort_key: The field ID, entry property, or entry meta key to sort the results.
+     * sort_direction: The direction to sort the results. Can be ASC, DESC, or RAND.
+     * sort_is_num: Indicates if the values of the specified key are numeric.
+     *
+     * If you only want unique values use the attribute unique and give it any value (aside from 0 or an empty string).
+     *
+     * If you want to return a specific amount of results use the limit attribute. The default is one result. If you want to display all the results use the
+     * value 'all' (limit="all", limit="ALL" or limit="All"). If you enter a number greater than the total amount of results all of them will be returned. If you enter 0 or an empty string
+     * the default value will be used.
+     */
+    if ( is_null( $content ) ) {
+        return '';
+    }
+    $atts = shortcode_atts( [
+        'target' => '0',
+        'search' => '',
+        'greater_than' => false,
+        'less_than' => false,
+        'display' => '',
+        'sort_key' => 'id',
+        'sort_direction' => 'DESC',
+        'sort_is_num' => true,
+        'unique' => false,
+        'limit' => '1',
+		'search_mode' => 'all'
+    ], $atts );
 
-	$search_criteria                    = [];
-	$search_criteria['status']          = 'active';
-	$search_criteria['field_filters']   = [];
-    $search_criteria['field_filters'][] = [ 'key' => $atts['search'], 'value' => $content ];
+	if ( 'all' === strtolower( $atts['limit'] ) ) {
+		$atts['limit'] = 'all';
+	}
+
+    $search_criteria                    = [];
+    $search_criteria['status']          = 'active';
+    $search_criteria['field_filters']   = [];
+	$search_criteria['field_filters']['mode'] = $atts['search_mode'];
+	
+	$search_ids = array_map( 'trim', explode( ',', $atts['search'] ) );
+	
+	$content_values = array_map( 'trim', explode( ',', $content ) );
+	
+	foreach( $search_ids as $index => $search_id ) {
+		$search_criteria['field_filters'][] = [ 'key' => $search_id, 'value' => $content_values[ $index ] ];
+	}
 
     $sorting = [
         'key' => $atts['sort_key'],
@@ -33,40 +70,88 @@ function gfsearch_shortcode( $atts, $content ) {
     ];
 
     $paging_offset = 0;
-	$total_count = 0;
-	$paging = [
-		'offset'    => $paging_offset,
-		'page_size' => $atts['all'] ? 25 : 1,
-	];
+    $total_count = 0;
 
-    if ( strlen( $atts['target'] ) > 1 ) {
-	    $form_id = array_map('intval', explode(',', $atts['target']));
+    if ( empty( $atts['limit'] ) ) {
+        $page_size = 1;
+    } elseif ( 'all' === $atts['limit'] ) {
+        $page_size = 25;
     } else {
-        $form_id = intval( $atts['target'] );
+        $page_size = min( intVal( $atts['limit'] ), 25 );
     }
+    $paging = [
+        'offset'    => $paging_offset,
+        'page_size' => $page_size,
+    ];
 
-	$entries = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging, $total_count );
+    $form_id = array_map( 'intval', explode( ',', $atts['target'] ) );
 
-    if ( $atts['all'] ) {
-	    while ( $total_count > count( $entries ) ) {
-		    $paging_offset += 25;
-		    $paging         = array(
-			    'offset'    => $paging_offset,
-			    'page_size' => 25,
-		    );
-		    $new_entries = GFAPI::get_entries( $form_id, $search_criteria, null, $paging, $total_count );
-		    array_push( $entries, ...$new_entries ); // $entries = array_merge( $entries, $new_entries );
-	    }
+    $entries = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging, $total_count );
+
+    if ( 'all' === $atts['limit'] || intVal( $atts['limit'] ) > 25 ) {
+        while ( $total_count > count( $entries ) ) {
+            $paging_offset += 25;
+            $paging         = [
+                'offset'    => $paging_offset,
+                'page_size' => 25,
+            ];
+            $new_entries = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging, $total_count );
+            array_push( $entries, ...$new_entries ); // $entries = array_merge( $entries, $new_entries );
+			if ( is_numeric( $atts['limit'] ) && count( $entries ) > $atts['limit'] ){
+				break;
+			}
+        }
+        if ( is_numeric( $atts['limit'] ) ) {
+            $entries = array_slice( $entries, 0, intVal( $atts['limit'] ) );
+        }
     }
 
     if ( empty( $entries ) ) {
         return '';
     }
 
-    $results = [];
-    foreach ( $entries as $entry ) {
-        $results[] = $entry[$atts['display']];
+    if ( $atts['greater_than'] ) {
+		$greater_than = array_map( 'trim', explode( ',', $atts['greater_than'] ) );
+        $entries = array_filter( $entries, function( $entry ) use ( $greater_than ) {
+            if ( $entry[ $greater_than[0] ] > $greater_than[1] ) {
+                return true;
+            }
+            return false;
+        } );
+    }
+    if ( $atts['less_than'] ) {
+		$less_than = array_map( 'trim', explode( ',', $atts['less_than'] ) );
+        $entries = array_filter( $entries, function( $entry ) use ( $less_than ) {
+            if ( $entry[ $less_than[0] ] < $less_than[1] ) {
+                return true;
+            }
+            return false;
+        });
     }
 
-	return implode( ', ', $results );
+    $results = [];
+
+	$display_ids = array_map( 'trim', explode( ',', $atts['display'] ) );
+    foreach ( $entries as $entry ) {
+		$entry_results = [];
+		foreach ( $display_ids as $display_id ) {
+			$field = GFAPI::get_field( $entry['form_id'], $display_id );
+			if ( 'number' === $field->type && 'currency' === $field->numberFormat) {
+				$entry_results[] = GFCommon::to_money( $entry[ $display_id ], $entry['currency'] );
+			} else {
+				$entry_results[] = $entry[ $display_id ];
+			}
+		}
+		$results[] = implode( ', ', $entry_results );
+    }
+
+    if ( $atts['unique'] ) {
+        $results = array_unique( $results, SORT_STRING );
+    }
+
+	$results = array_map ( 'trim', $results );
+	$results = array_filter( $results, fn( $value ) => '' !== $value && ! is_null($value) );
+
+	$separator = count( $display_ids ) > 1 ? '; ' : ', ';
+    return implode( $separator, $results );
 }
