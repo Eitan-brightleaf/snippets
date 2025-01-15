@@ -39,9 +39,7 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 	 * value 'all' (limit="all", limit="ALL" or limit="All"). If you enter a number greater than the total amount of results all of them will be returned. If you enter 0 or an empty string
 	 * the default value will be used.
 	 */
-	if ( is_null( $content ) ) {
-		return '';
-	}
+	
 	$atts = shortcode_atts( [
 		'target' => '0',
 		'search' => '',
