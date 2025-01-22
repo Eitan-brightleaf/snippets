@@ -169,7 +169,7 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 	$results = array_filter( $results, fn( $value ) => '' !== $value && ! is_null($value) );
 
 	$separator = ( count( $display_ids ) > 1 || $multi_input_present ) ? '; ' : ', ';
-	return esc_html( implode( $separator, $results ) );
+	return wp_kses_post( implode( $separator, $results ) );
 }
 
 function is_multi_input_field( $field ): bool {
