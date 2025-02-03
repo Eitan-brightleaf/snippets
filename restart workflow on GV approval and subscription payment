@@ -81,36 +81,76 @@ function restart_workflow_on_subscription_payment( $entry, $action ): void {
 	}
 }
 
-add_action( 'gravityflowformconnector_new_entry',
-    function ( $new_entry, $entry, $form, $target_form ) {
-        // configure to the form id that the entry is being created on and the date field on that form
-        $target_form_id = 69;
-        $target_field_id = 3;
-        if ( $target_form['id'] === $target_form_id ) {
-            $new_entry[$target_field_id] = date( 'Y-m-d' );
-        }
-
-        return $new_entry;
-    },
-    10,
-    4
-);
-
 function manual_start_workflow( $entry, $checkbox_name ): void {
 	$form_id         = $entry['form_id'];
 	$api             = new Gravity_Flow_API( $form_id );
 	$workflow_status = $api->get_status( $entry );
-	$is_checkbox_checked = gravity_flow()->get_workflow_start_step( $form_id, $entry )->__get($checkbox_name); //check checkbox is currently checked
+	$is_checkbox_checked = gravity_flow()->get_workflow_start_step( $form_id, $entry )->__get( $checkbox_name ); //check checkbox is currently checked
 
 	if ( 'complete' == $workflow_status && $is_checkbox_checked) {
 		$steps = $api->get_steps();
 		array_shift( $steps );
 		$first_step = $steps[0];
-        
+
 		if ( $first_step ) {
 			$restart_reason = $checkbox_name === 'restart_workflow_checkbox' ? 'subscription payment' : 'Gravity View Approval';
 			gravity_flow()->add_timeline_note( $entry['id'], "Workflow started because of $restart_reason." );
+
+			add_action( 'gravityflowformconnector_new_entry',
+				function ( $new_entry ) {
+					// the date field id from the target form
+					$target_field_id = 3;
+					$new_entry[$target_field_id] = date( 'Y-m-d' );
+
+					return $new_entry;
+				}
+			);
+
 			$api->send_to_step( $entry, $first_step->get_id() );
 		}
 	}
 }
+
+add_action( 'gform_entry_detail_sidebar_middle', function ( $form, $entry ) {
+
+	$start_step = gravity_flow()->get_workflow_start_step( $form['id'], $entry );
+    $delay_view_approval = $start_step->__get( 'delay_workflow_checkbox' );
+    $restart_workflow_checkbox = $start_step->__get( 'restart_workflow_checkbox' );
+    
+    if ( ! $delay_view_approval && ! $restart_workflow_checkbox ) {
+        return;
+    }
+
+    $nonce = wp_create_nonce( 'restart_workflow_nonce' );
+    if (isset( $_POST['restart_workflow_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['restart_workflow_nonce'] ) ), 'restart_workflow_nonce' ) &&
+        isset( $_POST['restart-workflow-button'] ) && ( $_POST['restart-workflow-button'] === 'restart_workflow_checkbox' || $_POST['restart-workflow-button'] === 'delay_workflow_checkbox') ) {
+        manual_start_workflow( $entry, $_POST['restart-workflow-button'] );
+    }
+
+    ob_start();
+    ?>
+    <div class='postbox'>
+        <div class='postbox-header'>
+            <h2 class="hndle ui-sortable-handle">
+                Restart Workflow
+            </h2>
+        </div>
+        <div class='inside'>
+            <input type="hidden" name="restart_workflow_nonce" value="<?php echo esc_attr( $nonce ); ?>">
+	        <?php if ( $delay_view_approval ) : ?>
+                <button class="button button-large" name="restart-workflow-button" value="delay_workflow_checkbox">
+                    GV Approval
+                </button>
+                <br><br>
+	        <?php endif; ?>
+	        <?php if ( $restart_workflow_checkbox ) : ?>
+                <button class="button button-large" name="restart-workflow-button" value="restart_workflow_checkbox">
+                    Subscription Payment
+                </button>
+	        <?php endif; ?>
+        </div>
+    </div>
+
+    <?php
+    echo ob_get_clean();
+}, 10, 2 );
