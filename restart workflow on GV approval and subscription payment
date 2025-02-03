@@ -67,7 +67,7 @@ function gravityflow_next_step_start_control( $step, $current_step, $entry, $ste
 
 //to start workflow on approval
 add_action( 'gravityview/approve_entries/approved', 'restart_workflow_on_approval', 10, 1 );
-function restart_workflow_on_approval( $entry_id ) {
+function restart_workflow_on_approval( $entry_id ): void {
 	$entry = GFAPI::get_entry( $entry_id );
 
 	manual_start_workflow( $entry, 'delay_workflow_checkbox' );
@@ -81,19 +81,34 @@ function restart_workflow_on_subscription_payment( $entry, $action ): void {
 	}
 }
 
-function manual_start_workflow( $entry, $checkbox_name ) {
+add_action( 'gravityflowformconnector_new_entry',
+    function ( $new_entry, $entry, $form, $target_form ) {
+        // configure to the form id that the entry is being created on and the date field on that form
+        $target_form_id = 69;
+        $target_field_id = 3;
+        if ( $target_form['id'] === $target_form_id ) {
+            $new_entry[$target_field_id] = date( 'Y-m-d' );
+        }
+
+        return $new_entry;
+    },
+    10,
+    4
+);
+
+function manual_start_workflow( $entry, $checkbox_name ): void {
 	$form_id         = $entry['form_id'];
 	$api             = new Gravity_Flow_API( $form_id );
 	$workflow_status = $api->get_status( $entry );
-    $is_checkbox_checked = gravity_flow()->get_workflow_start_step()->__get($checkbox_name); //check checkbox is currently checked
+	$is_checkbox_checked = gravity_flow()->get_workflow_start_step( $form_id, $entry )->__get($checkbox_name); //check checkbox is currently checked
 
 	if ( 'complete' == $workflow_status && $is_checkbox_checked) {
 		$steps = $api->get_steps();
 		array_shift( $steps );
 		$first_step = $steps[0];
-
+        
 		if ( $first_step ) {
-            $restart_reason = $checkbox_name === 'restart_workflow_checkbox' ? 'subscription payment' : 'Gravity View Approval';
+			$restart_reason = $checkbox_name === 'restart_workflow_checkbox' ? 'subscription payment' : 'Gravity View Approval';
 			gravity_flow()->add_timeline_note( $entry['id'], "Workflow started because of $restart_reason." );
 			$api->send_to_step( $entry, $first_step->get_id() );
 		}
