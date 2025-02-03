@@ -138,7 +138,7 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 
 	$display_ids = array_map( 'sanitize_text_field', explode( ',', $atts['display'] ) );
 	$display_ids = array_map( 'trim', $display_ids );
-    $multi_input_present = false;
+	$multi_input_present = false;
 	foreach ( $entries as $entry ) {
 		$entry_results = [];
 		foreach ( $display_ids as $display_id ) {
@@ -146,18 +146,20 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 			$field = GFAPI::get_field( $entry['form_id'], $display_id );
 			if ( 'number' === $field->type && 'currency' === $field->numberFormat) {
 				$entry_results[] = GFCommon::to_money( $entry[ $display_id ], $entry['currency'] );
+			} elseif ( 'date' === $field->type ) {
+				$entry_results[] = GFCommon::date_display( $entry[ $display_id ], 'Y-m-d', $field->dateFormat );
 			} elseif ( is_multi_input_field( $field ) ) {
-                $multi_input_present = true;
-                $ids = array_column( $field['inputs'], 'id' );
-                foreach ( $ids as $id ) {
-                    $entry_results[] = $entry[ $id ];
-                }
-            } else {
+				$multi_input_present = true;
+				$ids = array_column( $field['inputs'], 'id' );
+				foreach ( $ids as $id ) {
+					$entry_results[] = $entry[ $id ];
+				}
+			} else {
 				$entry_results[] = $entry[ $display_id ];
 			}
 		}
 
-        $entry_results = array_filter( $entry_results, fn( $value ) => '' !== $value && ! is_null($value) );
+		$entry_results = array_filter( $entry_results, fn( $value ) => '' !== $value && ! is_null($value) );
 		$results[] = implode( ', ', $entry_results );
 	}
 
