@@ -52,7 +52,9 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 		'unique' => false,
 		'limit' => '1',
 		'search_mode' => 'all'
-	], $atts );
+	], $atts, 'gfsearch' );
+
+    $content = html_entity_decode( $content, ENT_QUOTES );
 
 	$search_criteria                    = [];
 	$search_criteria['status']          = 'active';
