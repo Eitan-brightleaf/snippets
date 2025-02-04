@@ -1,0 +1,8 @@
+add_filter( 'shortcode_atts_gravityview', function( $atts ) {
+    if ( in_array( get_class( gravityview()->request ), array( 'GV\Frontend_Request', 'GV\Mock_Request' ) ) ) {
+        foreach ( $atts as $key => $value ) {
+            $atts[$key] = html_entity_decode( $value, ENT_QUOTES );
+        }
+    }
+    return $atts;
+});
