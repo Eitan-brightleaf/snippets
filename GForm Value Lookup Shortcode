@@ -10,9 +10,13 @@ function gfsearch_shortcode( $atts, $content = null ): string {
      * search the specified forms.
      *
      * You can pass multiple id's to the search and display attributes, seperated by a comma, in order to search or display multiple fields. If you are searching
-     * for multiple fields enter the corresponding value as the content for the shortcode with each value to search for seperated by a comma. Make sure you have the
+     * for multiple fields enter the corresponding value as the content for the shortcode with each value to search for seperated by a | symbol. Make sure you have the
      * same amount of values as fields you are searching and make sure they are in the same order.
-     *
+	 * 
+	 * If you want custom formating for the display: Configure the attribute with the fomrat you would like for the display and surround each id# by curly braces 
+	 * i.e. display="This is example text before one field: {13} and this is some more ({14}), and this-{15} is the last field!). Each id {13}, {14}, and {15} will be replaced by
+	 * the correct value and the rest of the string will stay the same. Just make sure not to enter any characters that would break the shortcode such as " or [].
+	 * 
      * The search and display fields can be a field ID, entry property, or entry meta key.
      *
      * If you are searching for multiple values (fields) in the same entry you can use the search_mode attribute to determine if the entry must meet all the conditions
@@ -57,6 +61,8 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 
     $content = html_entity_decode( $content, ENT_QUOTES );
 
+	$form_id = array_map( 'intval', explode( ',', $atts['target'] ) );
+
     $search_criteria                    = [];
     $search_criteria['status']          = 'active';
     $search_criteria['field_filters']   = [];
@@ -65,9 +71,13 @@ function gfsearch_shortcode( $atts, $content = null ): string {
     $search_ids = array_map( 'sanitize_text_field', explode( ',', $atts['search'] ) );
     $search_ids = array_map( 'trim', $search_ids );
 
-    $content_values = array_map( 'trim', explode( ',', $content ) );
+    $content_values = array_map( 'trim', explode( '|', $content ) );
 
     foreach( $search_ids as $index => $search_id ) {
+		$current_field = GFAPI::get_field( $form_id[0], $search_id );
+		if ( 'number' === $current_field['type'] ) {
+			$content_values[ $index ] = str_replace( ',', '', $content_values[ $index ] );
+		}
         $search_criteria['field_filters'][] = [ 'key' => $search_id, 'value' => GFCommon::replace_variables( $content_values[ $index ], [], [] ) ];
     }
 
@@ -91,8 +101,6 @@ function gfsearch_shortcode( $atts, $content = null ): string {
         'offset'    => $paging_offset,
         'page_size' => $page_size,
     ];
-
-    $form_id = array_map( 'intval', explode( ',', $atts['target'] ) );
 
     $entries = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging, $total_count );
 
@@ -139,32 +147,47 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 
     $results = [];
 
+    $regex = '/{\d+}/';
+    preg_match_all( $regex, $atts['display'], $matches );
+    if ( empty( $matches ) ) {
+        $display_ids = array_map( 'sanitize_text_field', explode( ',', $atts['display'] ) );
+        $display_ids = array_map( 'trim', $display_ids );
+    } else {
+        $display_ids = array_map( fn( $id ) => str_replace( [ '{', '}' ], '', $id ), $matches );
+        $display_ids = array_map( 'sanitize_text_field', $display_ids[0] );
+    }
 
-    $display_ids = array_map( 'sanitize_text_field', explode( ',', $atts['display'] ) );
-    $display_ids = array_map( 'trim', $display_ids );
     $multi_input_present = false;
     foreach ( $entries as $entry ) {
         $entry_results = [];
         foreach ( $display_ids as $display_id ) {
 
             $field = GFAPI::get_field( $entry['form_id'], $display_id );
-            if ( 'number' === $field->type && 'currency' === $field->numberFormat) {
-                $entry_results[] = GFCommon::to_money( $entry[ $display_id ], $entry['currency'] );
+            if ( 'number' === $field->type ) {
+                $entry_results[ $display_id ] = GFCommon::format_number( $entry[ $display_id ], $field->numberFormat, $entry['currency'],true);
             } elseif ( 'date' === $field->type ) {
-                $entry_results[] = GFCommon::date_display( $entry[ $display_id ], 'Y-m-d', $field->dateFormat );
+                $entry_results[ $display_id ] = GFCommon::date_display( $entry[ $display_id ], 'Y-m-d', $field->dateFormat );
             } elseif ( is_multi_input_field( $field ) ) {
                 $multi_input_present = true;
                 $ids = array_column( $field['inputs'], 'id' );
                 foreach ( $ids as $id ) {
-                    $entry_results[] = $entry[ $id ];
+                    $entry_results[ $display_id ] = $entry[ $id ];
                 }
             } else {
-                $entry_results[] = $entry[ $display_id ];
+                $entry_results[ $display_id ] = $entry[ $display_id ];
             }
         }
 
         $entry_results = array_filter( $entry_results, fn( $value ) => '' !== $value && ! is_null($value) );
-        $results[] = implode( ', ', $entry_results );
+		if ( ! empty( $matches ) ) {
+            $display_format = sanitize_text_field( $atts['display'] );
+            foreach ( $display_ids as $display_id ) {
+                $display_format = str_replace( '{' . $display_id . '}', $entry_results[ $display_id ], $display_format );
+			}
+            $results[] = $display_format;
+		} else {
+			$results[] = implode( ', ', $entry_results );
+		}
     }
 
     if ( $atts['unique'] ) {
