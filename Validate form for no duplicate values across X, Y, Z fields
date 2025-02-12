@@ -21,7 +21,7 @@ add_filter( 'gform_validation', function ( $validation_result ) {
 		return $duplicate_keys;
 	}
 
-	function is_multi_input_field( string $field_type ): bool {
+	function check_is_multi_input_field( string $field_type ): bool {
 		return 'name' === $field_type || 'address' === $field_type || 'checkbox' === $field_type;
 	}
 
