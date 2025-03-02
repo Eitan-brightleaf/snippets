@@ -155,7 +155,8 @@ function manual_start_workflow( $entry, $checkbox_name ): void {
 add_action( 'gform_entry_detail_sidebar_middle', function ( $form, $entry ) {
 
 	$start_step = gravity_flow()->get_workflow_start_step( $form['id'], $entry );
-	$delay_view_approval = $start_step->__get( 'delay_workflow_checkbox' );
+	if ( $start_step ) {
+		$delay_view_approval = $start_step->__get( 'delay_workflow_checkbox' );
 	$restart_workflow_checkbox = $start_step->__get( 'restart_workflow_checkbox' );
 
 	if ( ! $delay_view_approval && ! $restart_workflow_checkbox ) {
@@ -194,4 +195,5 @@ add_action( 'gform_entry_detail_sidebar_middle', function ( $form, $entry ) {
 
 	<?php
 	echo ob_get_clean();
+	}
 }, 10, 2 );
