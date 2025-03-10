@@ -301,7 +301,7 @@ function render_form_folders_page(): void
                             </div>
                             |
                             <div class="dropdown" style="display: inline-block; position: relative;">
-                                <a href="<?php echo esc_url(admin_url('admin.php?page=gf_settings&view=settings&id=' . $form['id'])); ?>"
+                                <a href="<?php echo esc_url(admin_url('admin.php?page=gf_edit_forms&view=settings&subview=settings&id=' . $form['id'])); ?>"
                                    class="link">Settings</a>
                                 <!--Dropdown menu styling-->
                                 <ul class="dropdown-menu"
