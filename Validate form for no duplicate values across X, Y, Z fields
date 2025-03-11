@@ -21,8 +21,10 @@ add_filter( 'gform_validation', function ( $validation_result ) {
 		return $duplicate_keys;
 	}
 
-	function check_is_multi_input_field( string $field_type ): bool {
-		return 'name' === $field_type || 'address' === $field_type || 'checkbox' === $field_type;
+	if ( ! function_exists( 'check_is_multi_input_field' ) ) {
+		function check_is_multi_input_field( string $field_type ): bool {
+			return 'name' === $field_type || 'address' === $field_type || 'checkbox' === $field_type;
+		}
 	}
 
 	function get_values_with_key_pattern(array $array, string $id) {
