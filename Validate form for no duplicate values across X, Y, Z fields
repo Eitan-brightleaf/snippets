@@ -3,7 +3,7 @@ add_filter( 'gform_validation', function ( $validation_result ) {
 	$duplicate_field_ids[63] = [
 		[ 21 => 'message', 23 => 'message', 27 =>'message' ],
 		[ 21 => 'message', 24 =>'message' ],
-		[ 25 => 'message', 26 =>'message' ]
+		[ 25 => 'message', 26 =>'message' ],
 	];
 
 	$duplicate_field_ids[32] = [
