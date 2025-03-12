@@ -6,6 +6,11 @@ add_filter( 'gform_validation', function ( $validation_result ) {
 		[ 25 => 'message', 26 =>'message' ]
 	];
 
+	$duplicate_field_ids[32] = [
+		[ 3 => 'message', 17 => 'message', 46 =>'message' ],
+		[ 22 => 'message', 17 =>'message' ],
+	];
+
 	function get_duplicate_keys(array $array): array {
 		$value_counts = [];
 		$duplicate_keys = [];
