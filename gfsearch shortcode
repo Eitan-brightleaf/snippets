@@ -105,7 +105,7 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 	$sorting = [
 		'key' => sanitize_text_field( $atts['sort_key'] ),
 		'direction' => in_array( strtoupper( $atts['sort_direction'] ), [ 'ASC', 'DESC', 'RAND' ], true ) ? strtoupper( $atts['sort_direction'] ) : 'DESC',
-		'is_numeric' => $atts['sort_is_num'] === 'false' ? false : (bool) $atts['sort_is_num']
+		'is_numeric' => strtolower( $atts['sort_is_num'] ) === 'false' ? false : (bool) $atts['sort_is_num']
 	];
 
 	$secondary_sort_key = sanitize_text_field( $atts['secondary_sort_key'] );
