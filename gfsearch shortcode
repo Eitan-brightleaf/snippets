@@ -48,7 +48,7 @@ function gfsearch_shortcode( $atts, $content = null ): string {
 	 * value 'all' (limit="all"), case-insensitive. If you enter a number greater than the total amount of results all of them will be returned. If you enter 0 or an empty string
 	 * the default value will be used.
 	 *
-	 * You can specify the separator between results with the separator attribute (i.e. separator=<br>). Limited HTML (such as <br>) is allowed here.
+	 * You can specify the separator between results with the separator attribute (i.e. separator=&lt;br&gt;). Limited HTML (such as &lt;br&gt;) is allowed here.
 	 *
 	 * If you want to search for empty values, meaning where the specified field in the search atttribute is empty, leave the content of the shortcode blank
 	 * and use the search_empty attribute. You can give it any non-empty value (0, empty string, etc.). The default is false so if there is a search field
