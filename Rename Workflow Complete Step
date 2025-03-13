@@ -1,5 +1,5 @@
 add_filter( 'gravityview_field_output', function ( $html, $args, $context ) {
-    // add form id to arrat in comma seperated format
+    // add form id to array in comma seperated format
     $form_id_array = [3,45,5,7,21,51,25,11,29];
 
 	if (!is_null($args) && !is_null($args['entry']) && !is_null($args['entry']['form_id'])){
