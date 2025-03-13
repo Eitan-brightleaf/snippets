@@ -1,6 +1,6 @@
 add_filter('gform_save_field_value',function ($value, $entry, $field, $form){
 	$form_and_field_ids = array(
-		FORM_ID => array(FIELD_ID_ONE,FIELD_ID_TWO), //add form each form id here then //=> then array(), and in the parentheses add the fields id in comma separated //manner
+		FORM_ID => array(FIELD_ID_ONE,FIELD_ID_TWO), //add for each form id here then //=> then array(), and in the parentheses add the fields id in comma separated //manner
 	);
 	if (in_array($form['id'],array_keys($form_and_field_ids)) && in_array($field['id'],$form_and_field_ids[$form['id']])) {
 		$value = ucwords($value);
