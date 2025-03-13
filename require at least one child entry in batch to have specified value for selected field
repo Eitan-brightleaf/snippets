@@ -2,10 +2,10 @@ add_filter(
     'gform_field_validation',
     function( $result, $value, $form, $field ) {
 
-        $form_config[5] = [  // Replace with your parent form ID
-            'nested_field_id' => 77,        // Replace with fieldID of nested form
-            'child_field_id'  => 7,      // Replace with your child form field ID
-            'required_value'  => 'Expenses',// Replace with the string value to validate against
+        $form_config[71] = [  // Replace with your parent form ID
+            'nested_field_id' => 1,        // Replace with fieldID of nested form
+            'child_field_id'  => 1,      // Replace with your child form field ID
+            'required_value'  => 'test',// Replace with the string value to validate against
         ]; //copy this with new id's for new forms
 
         $form_id = rgar( $form, 'id' );
@@ -30,7 +30,7 @@ add_filter(
                 }
                 if ( ! $required_value_found ){
                     $result['is_valid'] = false;
-                    $result['message'] = "You must submit at least one credit card for $required_value.";
+                    $result['message'] = "Validation failed. At least one entry should contain $required_value.";
                 }
             }
         }
