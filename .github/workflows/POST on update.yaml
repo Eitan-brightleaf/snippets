@@ -29,10 +29,12 @@ jobs:
             echo "Updated files detected:"
             echo "$UPDATED_FILES"
 
+            COMMIT_MESSAGE=$(git log -1 --pretty=format:%s)  # Get latest commit message
+
             while IFS= read -r FILE; do
               FILE_NAME=$(basename "$FILE")  # Extract just the filename without quotes
-              COMMIT_MESSAGE=$(git log -1 --pretty=format:%s)
 
+              # Construct JSON payload
               JSON_PAYLOAD=$(jq -n \
                 --arg file_name "$FILE_NAME" \
                 --arg commit_msg "$COMMIT_MESSAGE" \
