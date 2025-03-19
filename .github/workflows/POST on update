@@ -1,0 +1,49 @@
+name: Submit New Files to Gravity Forms
+
+on:
+  push:
+    paths-ignore:
+      - '.github/workflows/**'
+
+jobs:
+  submit_new_files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Detect new files and submit to Gravity Forms
+        env:
+          GF_WEBHOOK_URL: ${{ secrets.GF_WEBHOOK_URL }}
+          GITHUB_REPO: ${{ github.repository }}  # e.g., "BrightLeafConsulting/repo-name"
+          GITHUB_BRANCH: ${{ github.ref_name }}  # Extracts the branch name
+          GITHUB_SHA: ${{ github.sha }}  # Commit hash for blob URLs
+        run: |
+          FILES=$(git diff --name-only --diff-filter=A ${{ github.event.before }}..HEAD)
+          
+          if [ -n "$FILES" ]; then
+            echo "New files detected:"
+            echo "$FILES"
+
+            for FILE in $FILES; do
+              FILE_NAME=$(basename "$FILE")
+              BLOB_URL="https://github.com/${GITHUB_REPO}/blob/${GITHUB_SHA}/${FILE}"
+              RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${FILE}"
+
+              JSON_PAYLOAD=$(jq -n \
+                --arg file_name "$FILE_NAME" \
+                --arg blob_url "$BLOB_URL" \
+                --arg raw_url "$RAW_URL" \
+                '{input_1: $file_name, input_5: $blob_url, input_4: $raw_url}')
+
+              echo "Submitting data for: $FILE_NAME"
+              echo "Blob URL: $BLOB_URL"
+              echo "Raw URL: $RAW_URL"
+
+              curl -X POST "$GF_WEBHOOK_URL" \
+                -H "Content-Type: application/json" \
+                -d "$JSON_PAYLOAD"
+            done
+          else
+            echo "No new files detected."
+          fi
