@@ -22,15 +22,15 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          # Find files that were updated (not created) and wrap them in quotes
-          UPDATED_FILES=$(git diff --name-only --diff-filter=M ${{ github.event.before }}..HEAD | sed 's/^/"/;s/$/"/')
+          # Find files that were updated (not created)
+          UPDATED_FILES=$(git diff --name-only --diff-filter=M ${{ github.event.before }}..HEAD)
 
           if [ -n "$UPDATED_FILES" ]; then
             echo "Updated files detected:"
             echo "$UPDATED_FILES"
 
             while IFS= read -r FILE; do
-              FILE_NAME=$(basename "$FILE")
+              FILE_NAME=$(basename "$FILE")  # Extract just the filename without quotes
               COMMIT_MESSAGE=$(git log -1 --pretty=format:%s)
 
               JSON_PAYLOAD=$(jq -n \
