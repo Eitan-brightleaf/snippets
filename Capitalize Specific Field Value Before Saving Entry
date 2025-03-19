@@ -1,4 +1,5 @@
-add_filter( 'gform_save_field_value_3_15', 'change_field_to_uppercase', 10, 3 ); //change formID and fieldID (the _3 and _15) to relevant targets
+add_filter( 'gform_save_field_value_3_15', 'change_field_to_uppercase', 10, 3 ); //change formID and fieldID (the _3 and _15) to relevant targets 
+// and remove the field id (_15) if you want it to apply to all fields on the form and remove the form id (_3) if you want it to apply to all forms also
 function change_field_to_uppercase( $value, $entry, $field ){
 	if ( $field->get_input_type() === 'text' ) {
 		$value = strtoupper( $value );
