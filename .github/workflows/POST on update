@@ -4,6 +4,7 @@ on:
   push:
     paths-ignore:
       - '.github/workflows/**'
+  create:
 
 jobs:
   submit_new_files:
