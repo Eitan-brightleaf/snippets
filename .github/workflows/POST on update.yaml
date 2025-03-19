@@ -21,7 +21,7 @@ jobs:
           GF_UPDATE_WEBHOOK_URL: ${{ secrets.GF_UPDATE_WEBHOOK_URL }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}  # Store commit message in env variable
+          COMMIT_MESSAGE: "${{ github.event.head_commit.message }}"  # Store commit message in env variable
         run: |
           # Find files that were updated (not created)
           UPDATED_FILES=$(git diff --name-only --diff-filter=M ${{ github.event.before }}..HEAD)
