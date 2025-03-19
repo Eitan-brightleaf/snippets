@@ -29,7 +29,7 @@ jobs:
             echo "Updated files detected:"
             echo "$UPDATED_FILES"
 
-            COMMIT_MESSAGE=$(git log -1 --pretty=format:%s)  # Get latest commit message
+            COMMIT_MESSAGE=${{ github.event.head_commit.message }}  # Get latest commit message
 
             while IFS= read -r FILE; do
               FILE_NAME=$(basename "$FILE")  # Extract just the filename without quotes
