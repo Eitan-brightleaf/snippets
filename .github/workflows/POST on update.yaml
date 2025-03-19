@@ -21,6 +21,7 @@ jobs:
           GF_UPDATE_WEBHOOK_URL: ${{ secrets.GF_UPDATE_WEBHOOK_URL }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}  # Store commit message in env variable
         run: |
           # Find files that were updated (not created)
           UPDATED_FILES=$(git diff --name-only --diff-filter=M ${{ github.event.before }}..HEAD)
@@ -28,11 +29,10 @@ jobs:
           if [ -n "$UPDATED_FILES" ]; then
             echo "Updated files detected:"
             echo "$UPDATED_FILES"
-
-            COMMIT_MESSAGE=${{ github.event.head_commit.message }}  # Get latest commit message
+            echo "Commit Message: $COMMIT_MESSAGE"
 
             while IFS= read -r FILE; do
-              FILE_NAME=$(basename "$FILE")  # Extract just the filename without quotes
+              FILE_NAME=$(basename "$FILE")  # Extract filename without quotes
 
               # Construct JSON payload
               JSON_PAYLOAD=$(jq -n \
@@ -41,7 +41,7 @@ jobs:
                 '{input_1: $file_name, input_2: $commit_msg}')
 
               echo "Submitting data for: $FILE_NAME"
-              echo "Commit Message: $COMMIT_MESSAGE"
+              echo "JSON Payload: $JSON_PAYLOAD"
 
               curl -X POST "$GF_UPDATE_WEBHOOK_URL" \
                 -H "Content-Type: application/json" \
