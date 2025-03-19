@@ -22,14 +22,14 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          # Find files that were updated (not created)
-          UPDATED_FILES=$(git diff --name-only --diff-filter=M ${{ github.event.before }}..HEAD)
+          # Find files that were updated (not created) and wrap them in quotes
+          UPDATED_FILES=$(git diff --name-only --diff-filter=M ${{ github.event.before }}..HEAD | sed 's/^/"/;s/$/"/')
 
           if [ -n "$UPDATED_FILES" ]; then
             echo "Updated files detected:"
             echo "$UPDATED_FILES"
 
-            for FILE in $UPDATED_FILES; do
+            while IFS= read -r FILE; do
               FILE_NAME=$(basename "$FILE")
               COMMIT_MESSAGE=$(git log -1 --pretty=format:%s)
 
@@ -44,7 +44,7 @@ jobs:
               curl -X POST "$GF_UPDATE_WEBHOOK_URL" \
                 -H "Content-Type: application/json" \
                 -d "$JSON_PAYLOAD"
-            done
+            done <<< "$UPDATED_FILES"
           else
             echo "No updated files detected."
           fi
