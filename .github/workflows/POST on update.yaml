@@ -38,7 +38,7 @@ jobs:
               JSON_PAYLOAD=$(jq -n \
                 --arg file_name "$FILE_NAME" \
                 --arg commit_msg "$COMMIT_MESSAGE" \
-                '{input_1: $file_name, input_2: $commit_msg}')
+                '{input_1: $file_name, input_3: $commit_msg}')
 
               echo "Submitting data for: $FILE_NAME"
               echo "JSON Payload: $JSON_PAYLOAD"
