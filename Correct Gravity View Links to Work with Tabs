@@ -36,7 +36,14 @@ add_filter(
         $post = $view->get_post();
         $id   = $post->ID;
 		if ( in_array( $id, array_keys( $view_ids ) ) ) {
-			$new_permalink = substr_replace( $permalink, "", strpos( $permalink, '?' ) );
+			
+			if ( strpos( $permalink, '?' ) !== false ) {
+    				// Remove everything from the `?` onwards if `?` exists.
+    				$new_permalink = substr_replace( $permalink, "", strpos( $permalink, '?' ) );
+			} else {
+    				// If `?` is not found, use the original permalink.
+    				$new_permalink = $permalink;
+			}
 
 			$new_permalink = $new_permalink . $view_ids[ $id ];
 
