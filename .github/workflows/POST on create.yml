@@ -36,7 +36,8 @@ jobs:
             echo "New files detected:"
             echo "$FILES"
 
-            for FILE in $FILES; do
+            # Process each file correctly using IFS= read
+            echo "$FILES" | while IFS= read -r FILE; do
               FILE_NAME=$(basename "$FILE")
               BLOB_URL="https://github.com/${GITHUB_REPO}/blob/${GITHUB_SHA}/${FILE}"
               RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${FILE}"
