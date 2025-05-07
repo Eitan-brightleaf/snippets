@@ -39,8 +39,9 @@ jobs:
             # Process each file correctly using IFS= read
             echo "$FILES" | while IFS= read -r FILE; do
               FILE_NAME=$(basename "$FILE")
-              BLOB_URL="https://github.com/${GITHUB_REPO}/blob/${GITHUB_SHA}/${FILE}"
-              RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${FILE}"
+              ENCODED_FILE_NAME=$(echo "$FILE_NAME" | jq -sRr @uri) # URL encode using jq
+              BLOB_URL="https://github.com/${GITHUB_REPO}/blob/${GITHUB_SHA}/${ENCODED_FILE_NAME}"
+              RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${ENCODED_FILE_NAME}"
 
               JSON_PAYLOAD=$(jq -n \
                 --arg file_name "$FILE_NAME" \
