@@ -1,0 +1,36 @@
+/**
+ * Decode JSON-encoded multifile upload fields when creating a new entry with Gravity Flow Form Connector
+ *
+ * @param array $new_entry   The new entry being created
+ * @param array $entry       The source entry
+ * @param array $form        The source form
+ * @param array $target_form The target form
+ * @param object $step       The current workflow step
+ *
+ * @return array The modified new entry
+ */
+function fix_multifile_upload_json_decode($new_entry, $entry, $form, $target_form, $step) {
+	// Loop through all fields in the target form
+	foreach ($target_form['fields'] as $field) {
+		// Check if this is a file upload field with multiple files enabled
+		if ($field->type == 'fileupload' && $field->multipleFiles) {
+			$field_id = $field->id;
+
+			// If this field exists in the new entry and is a JSON string
+			if (isset($new_entry[$field_id]) && is_string($new_entry[$field_id]) && $new_entry[$field_id] !== '') {
+				// Try to decode the JSON string
+				$decoded = json_decode($new_entry[$field_id], true);
+
+				// If it's a valid JSON array, use the decoded value
+				if (is_array($decoded)) {
+					$new_entry[$field_id] = $decoded;
+				}
+			}
+		}
+	}
+
+	return $new_entry;
+}
+
+// Hook into the filter for the new entry workflow step
+add_filter('gravityflowformconnector_new_entry', 'fix_multifile_upload_json_decode', 10, 5);
