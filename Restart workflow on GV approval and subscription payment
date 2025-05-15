@@ -119,7 +119,7 @@ function manual_start_workflow( $entry, $checkbox_name ): void {
 		}
 	}
 
-	if ( 'cancelled' == $workflow_status && $is_checkbox_checked ) {
+	if ( ('cancelled' === $workflow_status || 'complete' === $workflow_status ) && $is_checkbox_checked ) {
 		$steps = $api->get_steps();
 		array_shift( $steps );
 		$first_step = $steps[0];
