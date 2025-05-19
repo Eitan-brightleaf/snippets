@@ -1,4 +1,4 @@
-// version 1.0.0
+// version 1.0.1
 add_action(
     'init',
     function () {
@@ -117,6 +117,18 @@ function gfsearch_shortcode( $atts, $content = null ) {
 		$atts,
 		'gfsearch'
         );
+
+	// Allow everything wp_kses_post allows plus <a> and its attributes
+	$allowed_tags      = wp_kses_allowed_html( 'post' );
+	$allowed_tags['a'] = [
+		'href'   => true,
+		'title'  => true,
+		'target' => true,
+		'rel'    => true,
+		'class'  => true,
+		'id'     => true,
+		'style'  => true,
+	];
 
 	$content = html_entity_decode( $content, ENT_QUOTES );
 
@@ -344,7 +356,7 @@ function gfsearch_shortcode( $atts, $content = null ) {
 			$entry_results = array_filter( $entry_results, fn( $value ) => '' !== $value && ! is_null( $value ) );
 		}
 		if ( ! empty( $matches[0] ) ) {
-			$display_format = wp_kses_post( $atts['display'] );
+			$display_format = wp_kses( $atts['display'], $allowed_tags );
 			foreach ( $display_ids as $display_id ) {
 				// Replace both {id} and {gfs:id} formats with the value
 				// If the field was filtered out (because default was empty), use empty string
@@ -382,17 +394,6 @@ function gfsearch_shortcode( $atts, $content = null ) {
 	} else {
 		$separator = wp_kses_post( $atts['separator'] );
 	}
-	// Allow everything wp_kses_post allows plus <a> and its attributes
-	$allowed_tags      = wp_kses_allowed_html( 'post' );
-	$allowed_tags['a'] = [
-		'href'   => true,
-		'title'  => true,
-		'target' => true,
-		'rel'    => true,
-		'class'  => true,
-		'id'     => true,
-		'style'  => true,
-	];
 
 	return wp_kses( implode( $separator, $results ), $allowed_tags );
 }
