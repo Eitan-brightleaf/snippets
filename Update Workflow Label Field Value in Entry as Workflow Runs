@@ -1,0 +1,25 @@
+add_action('gravityflow_step_start', function($step_id, $entry_id, $form_id, $step_status, $step){
+	$entry = GFAPI::get_entry($entry_id);
+	$form = GFAPI::get_form($form_id);
+	$fields = $form['fields'];
+	$index = array_search('Workflow Step Field', array_column($fields,'label'), true );
+    $id = $fields[$index]['id'];
+    $entry[$id] = $step->get_name();
+    GFAPI::update_entry($entry);
+},10,5);
+add_action('gravityflow_workflow_complete',function ($entry_id, $form){
+	$entry = GFAPI::get_entry($entry_id);
+    $fields = $form['fields'];
+	$index = array_search('Workflow Step Field', array_column($fields,'label'), true );
+	$id = $fields[$index]['id'];
+    $step = gravity_flow()->get_workflow_complete_step( $form['id'], $entry );
+	$entry[$id] = $step->get_name();
+	GFAPI::update_entry($entry);
+},10,2);
+add_action('gravityflow_pre_cancel_workflow',function ($entry, $form){
+	$fields = $form['fields'];
+	$index = array_search('Workflow Step Field', array_column($fields,'label'), true );
+	$id = $fields[$index]['id'];
+    $entry[$id] = 'Cancelled';
+    GFAPI::update_entry($entry);
+},10,2);
