@@ -194,7 +194,7 @@ add_action(
 							],
 						],
 						[
-							'name'     => 'required_fields',
+							'name'     => 'required_fields[]',
 							'type'     => 'field_select',
 							'label'    => 'Required Fields',
 							'tooltip'  => 'Select fields that must not be empty for the coupon to be created.',
