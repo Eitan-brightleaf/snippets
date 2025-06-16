@@ -277,6 +277,7 @@ add_action(
 			 * @return bool True if the coupon creation should be aborted.
 			 */
 			public function should_abort( $entry ) {
+				$this->required_fields = array_filter( $this->required_fields );
 				if ( empty( $this->required_fields ) ) {
 					return false;
 				}
