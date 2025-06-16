@@ -1,0 +1,338 @@
+add_action(
+	'gravityflow_loaded',
+	function () {
+		/**
+		 * Class CouponCodeWorkflowStep
+		 *
+		 * Represents a workflow step associated with coupon code functionality.
+		 * This step type provides integration with the coupon code capability
+		 * and allows specific handling or processing within a workflow.
+		 *
+		 * Extends the Gravity_Flow_Step class.
+		 */
+		class CouponCodeWorkflowStep extends Gravity_Flow_Step {
+			// phpcs:disable PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundOutsideClass
+			/**
+			 * The step type identifier.
+			 *
+			 * @var string
+			 */
+			protected $_step_type = 'coupon-code'; // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore
+
+			/**
+			 * Constructor for the coupon code workflow step.
+			 *
+			 * @param array $feed The feed object.
+			 * @param array $entry The entry object.
+			 */
+			public function __construct( $feed = [], $entry = null ) {
+				parent::__construct( $feed, $entry );
+				// Add filters for custom merge tags
+				add_filter( 'gform_custom_merge_tags', [ $this,'add_coupon_code_merge_tag' ] );
+				add_filter( 'gform_replace_merge_tags', [ $this,'replace_coupon_code_merge_tag' ], 10, 5 );
+			}
+
+			/**
+			 * Adds a custom merge tag for the coupon code.
+			 *
+			 * @param array $merge_tags The current merge tags.
+			 * @return array The merge tags with the coupon code tag added.
+			 */
+			public function add_coupon_code_merge_tag( $merge_tags ) {
+				$merge_tags[] = [
+					'label' => 'Coupon Code',
+					'tag'   => '{coupon_code}',
+				];
+				return $merge_tags;
+			}
+
+			/**
+			 * Replaces the coupon code merge tag with the actual coupon code.
+			 *
+			 * @param string $text The text in which to replace the merge tag.
+			 * @param array  $form The current form.
+			 * @param array  $entry The current entry.
+			 * @param bool   $url_encode Whether to URL encode the replacement text.
+			 * @param bool   $esc_html Whether to escape HTML in the replacement text.
+			 *
+			 * @return string The text with the merge tag replaced.
+			 */
+			public function replace_coupon_code_merge_tag( $text, $form, $entry, $url_encode = false, $esc_html = true ) {
+				if ( ! str_contains( $text, '{coupon_code}' ) ) {
+					return $text;
+				}
+
+				$coupon_code = gform_get_meta( $entry['id'], 'created_coupon_code' );
+				if ( empty( $coupon_code ) ) {
+					$coupon_code = 'No coupon code available';
+				}
+
+				if ( $esc_html ) {
+					$coupon_code = esc_html( $coupon_code );
+				}
+
+				if ( $url_encode ) {
+					$coupon_code = rawurlencode( $coupon_code );
+				}
+
+				return str_replace( '{coupon_code}', $coupon_code, $text );
+			}
+
+			/**
+			 * Retrieves the settings array containing configuration details.
+			 *
+			 * @return array An associative array including the settings, such as titles and fields.
+			 */
+			public function get_settings() {
+				$forms        = GFAPI::get_forms();
+				$form_choices = array_map(
+						fn ( $form ) => [
+							'label' => $form['title'],
+							'value' => $form['id'],
+						],
+						$forms
+				);
+				return [
+					'title'  => 'Coupon Code',
+					'fields' => [
+						[
+							'name'     => 'coupon_code_field',
+							'type'     => 'text',
+							'label'    => 'Coupon Code',
+							'required' => true,
+							'class'    => 'merge-tag-support mt-position-right',
+							'tooltip'  => 'Enter the coupon code. Merge tags can be used to pass in the value of a field.',
+						],
+						[
+							'name'    => 'name_field',
+							'type'    => 'text',
+							'label'   => 'Coupon Name',
+							'tooltip' => 'Enter the coupon name. If not configured, the coupon code will be used as the name.',
+							'class'   => 'merge-tag-support mt-position-right',
+						],
+						[
+							'name'                => 'amount',
+							'type'                => 'text',
+							'label'               => 'Coupon Amount',
+							'tooltip'             => 'Enter the amount of the coupon.',
+							'required'            => true,
+							'class'               => 'merge-tag-support mt-position-right',
+							'validation_callback' => function ( $field, $amount ) {
+								if ( is_numeric( $amount ) && $amount < 1 ) {
+									$field->set_error( 'The amount must be greater than zero.' );
+								}
+							},
+						],
+						[
+							'name'       => 'type',
+							'type'       => 'radio',
+							'horizontal' => true,
+							'label'      => 'Discount Type',
+							'tooltip'    => 'Select the type of discount.',
+							'required'   => true,
+							'choices'    => [
+								[
+									'label' => 'Percentage',
+									'value' => 'percentage',
+								],
+								[
+									'label' => 'Flat',
+									'value' => 'flat',
+								],
+							],
+						],
+						[
+							'name'    => 'target_form',
+							'label'   => 'Target Form',
+							'type'    => 'select',
+							'choices' => $form_choices,
+							'tooltip' => 'Select the form to use the coupon code in.',
+						],
+						[
+							'name'                => 'coupon_start_date',
+							'type'                => 'text',
+							'label'               => 'Coupon Start Date',
+							'tooltip'             => 'Enter the start date of the coupon in MM/DD/YYYY format.',
+							'validation_callback' => function ( $field, $date ) {
+								if ( ! empty( $date ) && ! strtotime( $date ) ) {
+									$field->set_error( 'The start date is not valid.' );
+								} elseif ( ! empty( $date ) && ! preg_match( '/^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/', $date ) ) {
+									$field->set_error( 'The date must be in MM/DD/YYYY format.' );
+								}
+							},
+						],
+						[
+							'name'                => 'coupon_expiration_date',
+							'type'                => 'text',
+							'label'               => 'Coupon Expiration Date',
+							'tooltip'             => 'Enter the expiration date of the coupon in MM/DD/YYYY format.',
+							'validation_callback' => function ( $field, $date ) {
+								if ( ! empty( $date ) && ! strtotime( $date ) ) {
+									$field->set_error( 'The expiration date is not valid.' );
+								} elseif ( ! empty( $date ) && ! preg_match( '/^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/\d{4}$/', $date ) ) {
+									$field->set_error( 'The date must be in MM/DD/YYYY format.' );
+								}
+							},
+						],
+						[
+							'name'    => 'coupon_limit',
+							'type'    => 'text',
+							'label'   => 'Coupon Limit',
+							'tooltip' => 'Enter the number of times the coupon can be used. Default is unlimited. Merge tags can be used to pass in the value of a field.',
+							'class'   => 'merge-tag-support mt-position-right',
+						],
+						[
+							'name'    => 'stackable',
+							'type'    => 'checkbox',
+							'label'   => 'Stackable',
+							'tooltip' => 'Check this box to allow the coupon to be used with other coupons.',
+							'choices' => [
+								[
+									'label' => '',
+									'name'  => 'stackable',
+								],
+							],
+						],
+						[
+							'name'     => 'required_fields',
+							'type'     => 'field_select',
+							'label'    => 'Required Fields',
+							'tooltip'  => 'Select fields that must not be empty for the coupon to be created.',
+							'required' => false,
+							'multiple' => true,
+						],
+					],
+				];
+			}
+
+			/**
+			 * Process the step. Create the coupon based on the form submission.
+			 *
+			 * @return bool Is the step complete?
+			 */
+			public function process() {
+				$form  = $this->get_form();
+				$entry = $this->get_entry();
+
+				if ( $this->should_abort( $entry ) ) {
+					$this->add_note( 'Coupon creation aborted: required fields are empty.' );
+					return true;
+				}
+
+				$coupon_code = $this->get_coupon_codes( $this->coupon_code_field, $form, $entry );
+
+				if ( empty( $coupon_code ) ) {
+					$this->add_note( 'No coupon codes found.' );
+					return true;
+				}
+
+				if ( false === $this->name_field || empty( $this->name_field ) ) {
+					$coupon_name = $coupon_code;
+				} else {
+					$coupon_name = $this->name_field;
+					$coupon_name = GFCommon::replace_variables( $coupon_name, $form, $entry );
+					$coupon_name = '' === $coupon_name ? $coupon_code : $coupon_name;
+				}
+
+				$amount = GFCommon::replace_variables( $this->amount, $form, $entry );
+				$type   = $this->type;
+
+				$meta = [
+					'form_id'           => $this->target_form,
+					'coupon_name'       => $coupon_name,
+					'coupon_code'       => strtoupper( $coupon_code ),
+					'coupon_type'       => $type,
+					'coupon_amount'     => $amount,
+					'coupon_start'      => $this->coupon_start_date,
+					'coupon_expiration' => $this->coupon_expiration_date,
+					'coupon_limit'      => GFCommon::replace_variables( $this->coupon_limit, $form, $entry ),
+					'coupon_stackable'  => $this->stackable,
+				];
+
+				$this->create_coupon( $meta, $form['id'] );
+				// Store the coupon code in entry meta for use with merge tags
+				gform_update_meta( $entry['id'], 'created_coupon_code', strtoupper( $coupon_code ) );
+				$this->add_note( sprintf( 'Coupon created: %s', $coupon_code ) );
+
+				return true;
+			}
+
+			/**
+			 * Retrieves and processes coupon codes by replacing variables with their corresponding values.
+			 *
+			 * @param string $coupon_code_field The field containing the coupon code that needs processing.
+			 * @param array  $form The form data where the coupon code field exists.
+			 * @param array  $entry The entry data associated with the submitted form.
+			 *
+			 * @return string The processed coupon code with replaced variables.
+			 */
+			public function get_coupon_codes( $coupon_code_field, $form, $entry ) {
+				return str_replace( ' ', '', GFCommon::replace_variables( $coupon_code_field, $form, $entry ) );
+			}
+
+			/**
+			 * Check if the coupon creation should be aborted.
+			 *
+			 * @param array $entry The entry object.
+			 * @return bool True if the coupon creation should be aborted.
+			 */
+			public function should_abort( $entry ) {
+				if ( empty( $this->required_fields ) ) {
+					return false;
+				}
+
+				foreach ( $this->required_fields as $field_id ) {
+					$value = rgar( $entry, (string) $field_id );
+
+					if ( rgblank( $value ) ) {
+						return true;
+					}
+				}
+
+				return false;
+			}
+
+			/**
+			 * Creates a coupon and associates it with a form in Gravity Forms.
+			 *
+			 * @param array $meta An array of coupon metadata, including details such as coupon name, code, amount, type, start date, expiration date, and usage limits.
+			 * @param int   $form_id The ID of the form to associate the coupon with.
+			 *
+			 * @return void
+			 */
+			public function create_coupon( $meta, $form_id ) {
+				if ( ! class_exists( 'GFCoupons' ) ) {
+					return;
+				}
+
+				// hack to load GF Coupons data.php file
+				if ( is_callable( 'gf_coupons' ) ) {
+					gf_coupons()->get_config( [ 'id' => 0 ], false );
+				} else {
+					/* @noinspection PhpDynamicAsStaticMethodCallInspection */
+					GFCoupons::get_config( [ 'id' => 0 ], false );
+				}
+
+				if ( is_callable( 'gf_coupons' ) ) {
+					$meta['gravityForm']      = $meta['form_id'] ?: 0;// phpcs:ignore Universal.Operators.DisallowShortTernary.Found
+					$meta['couponName']       = $meta['coupon_name'];
+					$meta['couponCode']       = $meta['coupon_code'];
+					$meta['couponAmountType'] = $meta['coupon_type'];
+					$meta['couponAmount']     = $meta['coupon_amount'];
+					$meta['startDate']        = $meta['coupon_start'];
+					$meta['endDate']          = $meta['coupon_expiration'];
+					$meta['usageLimit']       = $meta['coupon_limit'];
+					$meta['isStackable']      = $meta['coupon_stackable'];
+					$meta['usageCount']       = 0;
+					unset( $meta['form_id'] );
+					gf_coupons()->insert_feed( $form_id, true, $meta );
+				} else {
+					/* @noinspection PhpUndefinedClassInspection */
+					GFCouponsData::update_feed( 0, $form_id, true, $meta );
+				}
+			}
+		}
+
+		Gravity_Flow_Steps::register( new CouponCodeWorkflowStep() );
+	}
+);
