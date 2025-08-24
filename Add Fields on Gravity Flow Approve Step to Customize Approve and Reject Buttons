@@ -1,30 +1,80 @@
+<?php
 add_filter(
 	'gravityflow_step_settings_fields',
-	function ( $settings ) {
+	function ( $settings, $step ) {
 
+		$has_user_input_step = false;
+		$flow                = gravity_flow();
+		$step                = $flow->get_step( $step );
+		$form_id             = $step->get_form_id();
+		$steps               = $flow->get_steps( $form_id );
+		if ( is_array( $steps ) ) {
+			foreach ( $steps as $_s ) {
+				if ( is_object( $_s ) && method_exists( $_s, 'get_type' ) && $_s->get_type() === 'user_input' ) {
+					$has_user_input_step = true;
+					break;
+				}
+			}
+		}
+
+		// Approval step: add fields for custom Approve/Reject button labels and conditionally Revert.
 		if ( rgars( $settings, '1/title' ) === 'Approval' ) {
 			$index = array_search( 'expiration', array_column( $settings[1]['fields'], 'name' ), true );
+			if ( false === $index ) {
+				$index = count( $settings[1]['fields'] );
+			}
 			$index++;
 
-			$approval_text = array(
+			$approval_text = [
 				'name'    => 'custom_approval_text',
 				'label'   => 'Custom Approval Button Text',
 				'type'    => 'text',
 				'class'   => 'merge-tag-support mt-position-right',
 				'tooltip' => 'Enter text that you would like to display instead of "Approve" for this step.',
-			);
-			array_splice( $settings[1]['fields'], $index, 0, array( $approval_text ) );
+			];
+			array_splice( $settings[1]['fields'], $index, 0, [ $approval_text ] );
 
-            $index++;
+			$index++;
 
-			$rejection_text = array(
+			$rejection_text = [
 				'name'    => 'custom_rejection_text',
 				'label'   => 'Custom Rejection Button Text',
 				'type'    => 'text',
 				'class'   => 'merge-tag-support mt-position-right',
 				'tooltip' => 'Enter text that you would like to display instead of "Reject" for this step.',
-			);
-			array_splice( $settings[1]['fields'], $index, 0, array( $rejection_text ) );
+			];
+			array_splice( $settings[1]['fields'], $index, 0, [ $rejection_text ] );
+
+			// Only show the Revert label field on Approval steps when the workflow has a User Input step.
+			if ( $has_user_input_step ) {
+				$index++;
+				$revert_text = [
+					'name'    => 'custom_revert_text',
+					'label'   => 'Custom Revert Button Text',
+					'type'    => 'text',
+					'class'   => 'merge-tag-support mt-position-right',
+					'tooltip' => 'Enter text that you would like to display instead of "Revert" when sending back to a User Input step.',
+				];
+				array_splice( $settings[1]['fields'], $index, 0, [ $revert_text ] );
+			}
+		}
+
+		// User Input step: add field for custom Update/Submit button label.
+		if ( rgars( $settings, '1/title' ) === 'User Input' ) {
+			$index = array_search( 'expiration', array_column( $settings[1]['fields'], 'name' ), true );
+			if ( false === $index ) {
+				$index = count( $settings[1]['fields'] );
+			}
+			$index++;
+
+			$submit_text = [
+				'name'    => 'custom_user_input_submit_text',
+				'label'   => 'Custom Update/Submit Button Text',
+				'type'    => 'text',
+				'class'   => 'merge-tag-support mt-position-right',
+				'tooltip' => 'Enter text that you would like to display instead of the default "Update" or "Submit" for this User Input step.',
+			];
+			array_splice( $settings[1]['fields'], $index, 0, [ $submit_text ] );
 		}
 
 		return $settings;
@@ -36,7 +86,7 @@ add_filter(
 add_filter(
 	'gravityflow_approve_label_workflow_detail',
 	function ( $approve_label, $step ) {
-		return empty($step->__get( 'custom_approval_text' )) ? $approve_label : $step->__get( 'custom_approval_text' );
+		return empty( $step->__get( 'custom_approval_text' ) ) ? $approve_label : $step->__get( 'custom_approval_text' );
 	},
 	10,
 	2
@@ -45,8 +95,38 @@ add_filter(
 add_filter(
 	'gravityflow_reject_label_workflow_detail',
 	function ( $reject_label, $step ) {
-        return empty($step->__get( 'custom_rejection_text' )) ? $reject_label : $step->__get( 'custom_rejection_text' );
+		return empty( $step->__get( 'custom_rejection_text' ) ) ? $reject_label : $step->__get( 'custom_rejection_text' );
 	},
 	10,
 	2
+);
+
+add_filter(
+	'gravityflow_revert_label_workflow_detail',
+	function ( $revert_label, $step ) {
+		return empty( $step->__get( 'custom_revert_text' ) ) ? $revert_label : $step->__get( 'custom_revert_text' );
+	},
+	10,
+	2
+);
+
+// User Input labels: override Submit/Update button texts on workflow detail based on custom step setting.
+add_filter(
+	'gravityflow_submit_button_text_user_input',
+	function ( $label, $form, $step ) {
+		$custom = is_object( $step ) && method_exists( $step, '__get' ) ? $step->__get( 'custom_user_input_submit_text' ) : '';
+		return empty( $custom ) ? $label : $custom;
+	},
+	10,
+	3
+);
+
+add_filter(
+	'gravityflow_update_button_text_user_input',
+	function ( $label, $form, $step ) {
+		$custom = is_object( $step ) && method_exists( $step, '__get' ) ? $step->__get( 'custom_user_input_submit_text' ) : '';
+		return empty( $custom ) ? $label : $custom;
+	},
+	10,
+	3
 );
