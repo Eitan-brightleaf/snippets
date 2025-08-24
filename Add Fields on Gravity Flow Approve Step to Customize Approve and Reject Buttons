@@ -4,15 +4,17 @@ add_filter(
 	function ( $settings, $step ) {
 
 		$has_user_input_step = false;
-		$flow                = gravity_flow();
-		$step                = $flow->get_step( $step );
-		$form_id             = $step->get_form_id();
-		$steps               = $flow->get_steps( $form_id );
-		if ( is_array( $steps ) ) {
-			foreach ( $steps as $_s ) {
-				if ( is_object( $_s ) && method_exists( $_s, 'get_type' ) && $_s->get_type() === 'user_input' ) {
-					$has_user_input_step = true;
-					break;
+		if ( $step ) {
+			$flow    = gravity_flow();
+			$step    = $flow->get_step( $step );
+			$form_id = $step->get_form_id();
+			$steps   = $flow->get_steps( $form_id );
+			if ( is_array( $steps ) ) {
+				foreach ( $steps as $_s ) {
+					if ( is_object( $_s ) && method_exists( $_s, 'get_type' ) && $_s->get_type() === 'user_input' ) {
+						$has_user_input_step = true;
+						break;
+					}
 				}
 			}
 		}
@@ -59,7 +61,7 @@ add_filter(
 			}
 		}
 
-		// User Input step: add field for custom Update/Submit button label.
+		// User Input step: add field for custom Submit button label.
 		if ( rgars( $settings, '1/title' ) === 'User Input' ) {
 			$index = array_search( 'expiration', array_column( $settings[1]['fields'], 'name' ), true );
 			if ( false === $index ) {
@@ -69,12 +71,30 @@ add_filter(
 
 			$submit_text = [
 				'name'    => 'custom_user_input_submit_text',
-				'label'   => 'Custom Update/Submit Button Text',
+				'label'   => 'Custom Submit Form Button Text',
 				'type'    => 'text',
 				'class'   => 'merge-tag-support mt-position-right',
-				'tooltip' => 'Enter text that you would like to display instead of the default "Update" or "Submit" for this User Input step.',
+				'tooltip' => 'Enter text that you would like to display instead of "Submit" for this User Input step.',
 			];
 			array_splice( $settings[1]['fields'], $index, 0, [ $submit_text ] );
+
+			$update_text = [
+				'name'    => 'custom_user_input_update_text',
+				'label'   => 'Custom Update Button Text',
+				'type'    => 'text',
+				'class'   => 'merge-tag-support mt-position-right',
+				'tooltip' => 'Enter text that you would like to display instead of "Update" for this User Input step.',
+			];
+			array_splice( $settings[1]['fields'], ++$index, 0, [ $update_text ] );
+
+			$save_progress_text = [
+				'name'    => 'custom_user_input_save_text',
+				'label'   => 'Custom Save Progress Button Text',
+				'type'    => 'text',
+				'class'   => 'merge-tag-support mt-position-right',
+				'tooltip' => 'Enter text to display instead of "Save Progress" for this User Input step.',
+			];
+			array_splice( $settings[1]['fields'], ++$index, 0, [ $save_progress_text ] );
 		}
 
 		return $settings;
@@ -124,7 +144,17 @@ add_filter(
 add_filter(
 	'gravityflow_update_button_text_user_input',
 	function ( $label, $form, $step ) {
-		$custom = is_object( $step ) && method_exists( $step, '__get' ) ? $step->__get( 'custom_user_input_submit_text' ) : '';
+		$custom = is_object( $step ) && method_exists( $step, '__get' ) ? $step->__get( 'custom_user_input_update_text' ) : '';
+		return empty( $custom ) ? $label : $custom;
+	},
+	10,
+	3
+);
+
+add_filter(
+	'gravityflow_save_progress_button_text_user_input',
+	function ( $label, $form, $step ) {
+		$custom = is_object( $step ) && method_exists( $step, '__get' ) ? $step->__get( 'custom_user_input_save_text' ) : '';
 		return empty( $custom ) ? $label : $custom;
 	},
 	10,
