@@ -24,7 +24,7 @@ jobs:
           COMMIT_MESSAGE: "${{ github.event.head_commit.message }}"  # Store commit message in env variable
         run: |
           # Include modified (M) and renamed (R) files
-          CHANGED_FILES=$(git diff --name-only --diff-filter=MR ${{ github.event.before }}..${{ github.sha }})
+          CHANGED_FILES=$(git diff -M --name-only --diff-filter=MR "${{ github.event.before }}".."${{ github.sha }}")
 
           if [ -n "$CHANGED_FILES" ]; then
             echo "Changed files detected (modified or renamed):"
