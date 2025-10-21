@@ -23,6 +23,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           COMMIT_MESSAGE: "${{ github.event.head_commit.message }}"  # Store commit message in env variable
         run: |
+          set -euo pipefail
           # Include modified (M) and renamed (R) files
           CHANGED_FILES=$(git diff -M --name-only --diff-filter=MR "${{ github.event.before }}".."${{ github.sha }}")
 
@@ -43,9 +44,16 @@ jobs:
                 '{input_1: $file_name, input_3: $commit_msg}')
 
               echo "Submitting data for: $FILE_NAME"
-              curl -X POST "$GF_UPDATE_WEBHOOK_URL" \
-                -H "Content-Type: application/json" \
-                -d "$JSON_PAYLOAD"
+              
+              HTTP_STATUS=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST "$GF_UPDATE_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "$JSON_PAYLOAD")
+  
+              if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+                echo "Webhook failed ($HTTP_STATUS):"
+                cat /tmp/resp.json || true
+                exit 1
+              fi
             done <<< "$CHANGED_FILES"
           else
             echo "No modified or renamed files detected."

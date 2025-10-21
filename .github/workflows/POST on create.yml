@@ -23,6 +23,7 @@ jobs:
           GITHUB_BRANCH: ${{ github.ref_name }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
           # Ensure the previous commit exists
           BEFORE_COMMIT=${{ github.event.before }}
           if [ -z "$BEFORE_COMMIT" ] || ! git rev-parse "$BEFORE_COMMIT" >/dev/null 2>&1; then
@@ -73,9 +74,17 @@ jobs:
               echo "Blob URL: $BLOB_URL"
               echo "Raw URL: $RAW_URL"
 
-              curl -X POST "$GF_WEBHOOK_URL" \
+              HTTP_STATUS=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST "$GF_WEBHOOK_URL" \
                 -H "Content-Type: application/json" \
-                -d "$JSON_PAYLOAD"
+                -d "$JSON_PAYLOAD")
+
+              if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+                echo "⚠️ Webhook failed for $FILE_NAME (HTTP $HTTP_STATUS):"
+                cat /tmp/resp.json 2>/dev/null || echo "(no response body)"
+                exit 1
+              else
+                echo "✓ Success (HTTP $HTTP_STATUS)"
+              fi
             done
           else
             echo "No new files detected (renames excluded)."
