@@ -15,10 +15,10 @@
  * - Add more forms by adding to $form_ids array: form_id => [field_id_1, field_id_2]
  */
 add_action(
-    'gform_after_submission',
-    function ( $entry, $form ) {
+	'gform_after_submission',
+	function ( $entry, $form ) {
 
-        $to = ''; // add email here
+		$to = ''; // add email here
 
 		$form_ids = [
 			30 => [
@@ -32,12 +32,7 @@ add_action(
 			],
 		];
 
-        $user = wp_get_current_user();
-        if ( ! $user ) {
-            return;
-        }
-
-        $warning = [];
+		$warning = [];
 		if ( in_array( intval( $form['id'] ), array_map( 'intval', array_keys( $form_ids ) ), true ) ) {
 			foreach ( $form_ids[ $form['id'] ] as $field_id ) {
 				if ( empty( $entry[ $field_id ] ) ) {
@@ -49,14 +44,15 @@ add_action(
 				}
 			}
 			if ( ! empty( $warning ) ) {
-                $time = ( new DateTime( 'now', new DateTimeZone( wp_timezone_string() ) ) )->format( 'm/d/Y g:i A' );
+				$time = ( new DateTime( 'now', new DateTimeZone( wp_timezone_string() ) ) )->format( 'm/d/Y g:i A' );
 
 				$form_title = $form['title'];
 				$errors     = implode( PHP_EOL, $warning );
 				$subject    = "0 value in donation form ledger amount field on form $form_title at $time";
-                $user_id    = $user->ID ?? 0;
-                $user_name  = $user_id > 0 ? $user->display_name : 'Guest';
-                $user_email = $user_id > 0 ? $user->user_email : 'N/A';
+				$user       = wp_get_current_user();
+				$user_id    = $user->ID;
+				$user_name  = $user_id > 0 ? $user->display_name : 'Guest';
+				$user_email = $user_id > 0 ? $user->user_email : 'N/A';
 				$url        = $entry['source_url'];
 
 				$message = "Time: $time" . PHP_EOL . "URL: $url" . PHP_EOL . "Form: $form_title" . PHP_EOL . "User: $user_name" . PHP_EOL . "User Email: $user_email" . PHP_EOL . $errors;
@@ -64,6 +60,6 @@ add_action(
 			}
 		}
 	},
-    10,
-    2
+	10,
+	2
 );
