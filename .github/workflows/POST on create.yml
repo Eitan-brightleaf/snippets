@@ -16,12 +16,12 @@ jobs:
         with:
           fetch-depth: 0  # Ensures full commit history is available
 
-      - name: Detect new files and submit to Gravity Forms
+      - name: Detect new files (exclude renames) and submit to Gravity Forms
         env:
           GF_WEBHOOK_URL: ${{ secrets.GF_WEBHOOK_URL }}
-          GITHUB_REPO: ${{ github.repository }}  # e.g., "Eitan-brightleaf/snippets"
-          GITHUB_BRANCH: ${{ github.ref_name }}  # Extracts the branch name
-          GITHUB_SHA: ${{ github.sha }}  # Commit hash for blob URLs
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_BRANCH: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           # Ensure the previous commit exists
           BEFORE_COMMIT=${{ github.event.before }}
@@ -30,16 +30,36 @@ jobs:
             BEFORE_COMMIT="HEAD~1"
           fi
 
-          FILES=$(git diff --name-only --diff-filter=A $BEFORE_COMMIT..HEAD)
+          # Get added files, but exclude any that are part of a rename
+          # Strategy:
+          # 1) Collect added files (A)
+          # 2) Collect renamed pairs (R) and extract the new path (right side)
+          # 3) Subtract renamed-new-paths from added list
+          ADDED_FILES=$(git diff --name-only --diff-filter=A "$BEFORE_COMMIT"..HEAD)
+          RENAMED_NEW_PATHS=$(git diff --name-status --diff-filter=R "$BEFORE_COMMIT"..HEAD | awk '{print $3}')
 
-          if [ -n "$FILES" ]; then
-            echo "New files detected:"
-            echo "$FILES"
+          # Filter ADDED_FILES to remove any path that appears as a renamed destination
+          CLEAN_ADDED_FILES=""
+          if [ -n "$ADDED_FILES" ]; then
+            while IFS= read -r FILE; do
+              [ -z "$FILE" ] && continue
+              if ! echo "$RENAMED_NEW_PATHS" | grep -Fxq "$FILE"; then
+                CLEAN_ADDED_FILES="${CLEAN_ADDED_FILES}"$'\n'"$FILE"
+              fi
+            done <<< "$ADDED_FILES"
+            CLEAN_ADDED_FILES=$(echo "$CLEAN_ADDED_FILES" | sed '/^$/d')
+          fi
 
-            # Process each file correctly using IFS= read
-            echo "$FILES" | while IFS= read -r FILE; do
+          if [ -n "$CLEAN_ADDED_FILES" ]; then
+            echo "New files detected (renames excluded):"
+            echo "$CLEAN_ADDED_FILES"
+
+            echo "$CLEAN_ADDED_FILES" | while IFS= read -r FILE; do
+              [ -z "$FILE" ] && continue
               FILE_NAME=$(basename "$FILE")
-              ENCODED_FILE_NAME=$(echo "$FILE_NAME" | jq -sRr @uri) # URL encode using jq
+              FILE_NAME=${FILE_NAME%.*}
+              ENCODED_FILE_NAME=$(echo "$FILE" | jq -sRr @uri) # encode full path for URLs
+
               BLOB_URL="https://github.com/${GITHUB_REPO}/blob/${GITHUB_SHA}/${ENCODED_FILE_NAME}"
               RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${ENCODED_FILE_NAME}"
 
@@ -58,5 +78,5 @@ jobs:
                 -d "$JSON_PAYLOAD"
             done
           else
-            echo "No new files detected."
+            echo "No new files detected (renames excluded)."
           fi

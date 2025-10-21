@@ -16,38 +16,37 @@ jobs:
         with:
           fetch-depth: 0  # Ensure full commit history
 
-      - name: Detect updated files and submit form
+      - name: Detect updated/renamed files and submit form
         env:
           GF_UPDATE_WEBHOOK_URL: ${{ secrets.GF_UPDATE_WEBHOOK_URL }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
           COMMIT_MESSAGE: "${{ github.event.head_commit.message }}"  # Store commit message in env variable
         run: |
-          # Find files that were updated (not created)
-          UPDATED_FILES=$(git diff --name-only --diff-filter=M ${{ github.event.before }}..HEAD)
+          # Include modified (M) and renamed (R) files
+          CHANGED_FILES=$(git diff --name-only --diff-filter=MR ${{ github.event.before }}..${{ github.sha }})
 
-          if [ -n "$UPDATED_FILES" ]; then
-            echo "Updated files detected:"
-            echo "$UPDATED_FILES"
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "Changed files detected (modified or renamed):"
+            echo "$CHANGED_FILES"
             echo "Commit Message: $COMMIT_MESSAGE"
 
             while IFS= read -r FILE; do
-              FILE_NAME=$(basename "$FILE")  # Extract filename without quotes
+              [ -z "$FILE" ] && continue
+
+              FILE_NAME=$(basename "$FILE")
               FILE_NAME=${FILE_NAME%.*}
 
-              # Construct JSON payload
               JSON_PAYLOAD=$(jq -n \
                 --arg file_name "$FILE_NAME" \
                 --arg commit_msg "$COMMIT_MESSAGE" \
                 '{input_1: $file_name, input_3: $commit_msg}')
 
               echo "Submitting data for: $FILE_NAME"
-              echo "JSON Payload: $JSON_PAYLOAD"
-
               curl -X POST "$GF_UPDATE_WEBHOOK_URL" \
                 -H "Content-Type: application/json" \
                 -d "$JSON_PAYLOAD"
-            done <<< "$UPDATED_FILES"
+            done <<< "$CHANGED_FILES"
           else
-            echo "No updated files detected."
+            echo "No modified or renamed files detected."
           fi
