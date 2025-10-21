@@ -35,8 +35,8 @@ jobs:
           # 1) Collect added files (A)
           # 2) Collect renamed pairs (R) and extract the new path (right side)
           # 3) Subtract renamed-new-paths from added list
-          ADDED_FILES=$(git diff --name-only --diff-filter=A "$BEFORE_COMMIT"..HEAD)
-          RENAMED_NEW_PATHS=$(git diff --name-status --diff-filter=R "$BEFORE_COMMIT"..HEAD | awk '{print $3}')
+          ADDED_FILES=$(git diff -M --name-only --diff-filter=A "$BEFORE_COMMIT".."${{ github.sha }}")
+          RENAMED_NEW_PATHS=$(git diff -M --name-status --diff-filter=R "$BEFORE_COMMIT".."${{ github.sha }}" | awk '{print $3}')
 
           # Filter ADDED_FILES to remove any path that appears as a renamed destination
           CLEAN_ADDED_FILES=""
