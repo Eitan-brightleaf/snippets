@@ -33,6 +33,7 @@ jobs:
 
             while IFS= read -r FILE; do
               FILE_NAME=$(basename "$FILE")  # Extract filename without quotes
+              FILE_NAME=${FILE_NAME%.*}
 
               # Construct JSON payload
               JSON_PAYLOAD=$(jq -n \
