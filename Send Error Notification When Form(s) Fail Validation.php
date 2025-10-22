@@ -8,7 +8,7 @@
  * validation rules, or user experience issues that need attention.
  *
  * CONFIGURATION:
- * 1. $to: Add the recipient email address where notifications should be sent. REQUIRED
+ * 1. $to: Add the recipient email address where notifications should be sent. Else, defaults to admin email.
  *
  * 2. $whitelist: Choose which forms to monitor
  *    - Leave empty [] to monitor ALL forms
@@ -28,6 +28,10 @@ add_action(
 		$whitelist = []; // Empty = monitor all forms. Add form IDs like [1, 5, 12] to monitor only those forms
 		$blacklist = []; // Empty = exclude no forms. Add form IDs like [3, 7] to skip those forms. If both configured, blacklist wins
 		$to        = ''; // add email here
+
+        if ( empty( $to ) ) {
+            $to = get_option( 'admin_email' );
+        }
 
 		// Form filtering logic
 		if ( ! empty( $blacklist ) && in_array( intval( $form['id'] ), array_map( 'intval', $blacklist ), true ) ) {

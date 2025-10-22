@@ -12,7 +12,7 @@
  * errors that occur during email sending, such as SMTP connection issues, invalid email addresses, or wp_mail() failing.
  *
  * CONFIGURATION REQUIRED:
- * - $to: CRITICAL - Add recipient email address in $to variable (currently empty)
+ * - $to: - Add recipient email address in $to variable (currently empty). Else, defaults to admin email.
  */
 
 add_action(
@@ -23,6 +23,10 @@ add_action(
         }
 
         $to = ''; // add email here
+
+        if ( empty( $to ) ) {
+            $to = get_option( 'admin_email' );
+        }
 
         $time = ( new DateTime( 'now', new DateTimeZone( wp_timezone_string() ) ) )->format( 'm/d/Y g:i A' );
 
