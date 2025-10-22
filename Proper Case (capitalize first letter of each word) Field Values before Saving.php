@@ -1,6 +1,6 @@
 <?php
 /**
- * SNIPPET ANALYSIS: Proper Case (Capitalize First Letter of Each Word) Field Values Before Saving
+ * Proper Case (Capitalize First Letter of Each Word) Field Values Before Saving
  *
  * GOAL:
  * Automatically converts field values to proper/title case (first letter of each word capitalized)
