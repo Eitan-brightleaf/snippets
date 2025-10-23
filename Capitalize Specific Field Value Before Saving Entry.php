@@ -3,13 +3,26 @@
  * Capitalize Specific Text Field Value Before Saving Entry (or perform other transformations)
  *
  * GOAL:
- * Converts text field values to uppercase, or applies other selected transformations, before saving a Gravity Forms entry.
+ * Transforms text field values using various string manipulation methods before saving a Gravity Forms entry.
+ * By default, converts text to uppercase.
+ * Available transformations include:
+ * - Case transformations: uppercase, lowercase, title case, camelCase, PascalCase, sentence case
+ * - Formatting: URL-friendly slugs, phone number formatting, whitespace trimming, space collapsing
+ * - Cleaning: strip HTML tags, remove non-alphanumeric characters
+ * - Special: string reversal
  * Uses the gform_save_field_value filter to transform field data during the save process.
+ *
+ * FEATURES:
+ * - Multiple transformations can be applied in sequence
+ * - Highly configurable with 12+ built-in transformation options
+ * - Form and field-specific targeting
+ * - Preserves original value if transformation not applicable
+ * - Sanitizes output for security
  *
  * CONFIGURATION REQUIRED:
  * - gform_save_field_value_3_16: Change '3' to your target form ID (or remove '_3' to apply to all forms)
  * - gform_save_field_value_3_16: Change '16' to your target field ID (or remove '_16' to apply to all fields on the form)
- * - $apply: Add or remove transformations as needed. Default is 'upper'. Other options: 'lower', 'title', 'camel', 'pascal', 'sentence', 'slug', 'trim', 'collapse', 'alphanumeric', 'phone', 'strip_tags', 'reverse'
+ * - $apply: Default is set to uppercase ('upper'). Other options include: 'lower', 'title', 'camel', 'pascal', 'sentence', 'slug', 'trim', 'collapse', 'alphanumeric', 'phone', 'strip_tags', 'reverse'. Add or modify transformations as needed.
  */
 
 add_filter(
