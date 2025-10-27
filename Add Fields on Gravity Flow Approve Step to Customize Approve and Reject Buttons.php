@@ -1,3 +1,4 @@
+<?php
 add_filter(
 	'gravityflow_step_settings_fields',
 	function ( $settings, $step ) {
