@@ -31,7 +31,6 @@
  * Notes:
  * - Exports exactly what the GravityView Table layout renders across all pages; HTML is stripped.
  * - If a cell’s output is obfuscated in the DOM (e.g., email), the exporter substitutes the raw Gravity Forms value when possible.
- * - Deprecated/removed attributes: include_meta, only_view_fields, fields, export_dom, strip_tags.
  */
 
 use GV\Frontend_Request;
