@@ -19,7 +19,8 @@
  * - Any link inside the popup with class "gosmartmodalbutton" will close the popup first,
  *   then continue to that link. If it’s a #section link, the page will smooth‑scroll there.
  * - Friendly with Gravity Forms: you can place a [gravityform] shortcode inside the popup.
- * - Respectful behavior: if a visitor closed a popup, it won’t pop again for 30 minutes.
+ * - Respectful behavior: if a visitor closed a popup, it won’t pop again for its dismiss_for
+ *   duration (30 minutes by default).
  *
  * Requirements
  * - WordPress and (optionally) Gravity Forms if you want to show a form in the popup.
@@ -53,10 +54,10 @@
  *       - CSS length value → e.g., 70vw, 90%, 40rem, 32em, 720px
  *       - Default: 700 (px)
  *       - Note: complex CSS functions like calc() are not supported here.
- *   • id: unique identifier used to remember dismissals for 30 minutes.
+ *   • id: unique identifier used to scope dismissal memory per popup instance.
  *       - Allowed characters: letters, numbers, underscore, hyphen
  *       - Default: auto‑generated unique id
- *       - Reusing the same id across pages shares the 30‑minute dismissal memory.
+ *       - Reusing the same id across pages shares the dismissal memory.
  *
  * - Inner blocks: each <div> inside controls one popup instance with its own settings.
  *   • open_on (required): when to open this popup.
@@ -70,15 +71,24 @@
  *       - Milliseconds with unit: "5000ms"
  *       - Bare milliseconds: "10000"
  *       - Omit or set to 0/empty to disable auto‑close
+ *   • dismiss_for: how long this popup stays dismissed after it opens (exit/idle).
+ *       - Seconds: "10s", "2.5s"
+ *       - Minutes: "30m", "0.5m"
+ *       - Hours:   "1h", "1.5h"
+ *       - Milliseconds with unit: "5000ms"
+ *       - Bare milliseconds: "1800000"
+ *       - Use 0 to disable dismissal memory for this instance
+ *       - Default: "30m"
  *
  * Full attribute reference (quick lookup)
  * - [gosmartmodal] wrapper attributes
  *   • width (string|number): max content width. Accepts integer (px) or a CSS length keyword like 70vw, 90%, 40rem, 32em, 720px. Default: 700.
- *   • id (string): unique slug used to scope 30‑minute dismissal memory. Allowed: A–Z, a–z, 0–9, _, -. Default: generated.
+ *   • id (string): unique slug used to scope dismissal memory per popup. Allowed: A–Z, a–z, 0–9, _, -. Default: generated.
  * - Inner <div> attributes (one overlay per <div>)
  *   • open_on (string, required): "exit", "exit-intent", or "idle:N" (N seconds, decimals allowed).
  *   • position (string): "top" | "center" | "bottom". Default: "center".
  *   • dismiss (string|number): "Xs" (seconds), "Yms" (milliseconds), or bare number in ms. Default: no auto‑close.
+ *   • dismiss_for (string|number): memory window after opening via exit/idle. Formats: "Xs", "Xm", "Xh", "Yms", or bare ms. 0 disables. Default: 30m.
  *
  * Examples
  * - Exit intent with bottom position and no auto‑close:
@@ -91,9 +101,9 @@
  *     <div open_on="idle:8" dismiss="8000">...</div>
  *
  * Behavior notes
- * - Dismissal memory: When a popup opens via exit/idle, it won’t open again for 30 minutes
- *   for the same [gosmartmodal id] + reason ("exit" or "idle:N"). Use a different id to
- *   treat it as a separate campaign.
+ * - Dismissal memory: When a popup opens via exit/idle, it won’t open again for the per‑popup
+ *   dismiss_for duration (default 30 minutes) for the same [gosmartmodal id] + reason ("exit" or
+ *   "idle:N"). Use a different id to treat it as a separate campaign.
  * - Accessibility: role="dialog", aria-modal="true", ESC key closes. Focus moves to the
  *   close button on open. Clicking backdrop closes.
  * - Links with class .gosmartmodalbutton close the popup first, then navigate. #hash links
@@ -116,6 +126,8 @@
  * - If you closed a popup and want to see it again while testing, wait 30 minutes or
  *   clear local site data for the page (the dismissal memory lives in your browser storage).
  * - Links to on‑page anchors like #pricing will smooth‑scroll after the popup closes.
+ * - If you closed a popup and want to see it again while testing, either set dismiss_for="0"
+ *   on that popup or wait for its dismiss_for period to elapse (30 minutes by default).
  * - If you place a Gravity Form inside and it looks “frozen” until the popup opens,
  *   that’s expected—scripts wait until the form is visible. Once the popup opens,
  *   the form behaves normally.
@@ -199,9 +211,10 @@ if ( ! function_exists( 'bl_gosmartmodal_shortcode' ) ) {
 					if ( ! ( $node instanceof DOMElement ) ) {
 						continue;
 					}
-					$open_on  = trim( (string) $node->getAttribute( 'open_on' ) );
-					$position = strtolower( trim( (string) $node->getAttribute( 'position' ) ) );
-					$dismiss  = trim( (string) $node->getAttribute( 'dismiss' ) );
+					$open_on     = trim( (string) $node->getAttribute( 'open_on' ) );
+					$position    = strtolower( trim( (string) $node->getAttribute( 'position' ) ) );
+					$dismiss     = trim( (string) $node->getAttribute( 'dismiss' ) );
+					$dismiss_for = trim( (string) $node->getAttribute( 'dismiss_for' ) );
 
 					// Determine trigger type and optional idle seconds.
 					$trigger      = 'manual';
@@ -222,6 +235,30 @@ if ( ! function_exists( 'bl_gosmartmodal_shortcode' ) ) {
 							$dismiss_ms = (int) $dm[1];
 						} elseif ( preg_match( '/^\d+$/', $dismiss ) ) {
 							$dismiss_ms = (int) $dismiss;
+						}
+					}
+
+					// Parse dismiss_for into milliseconds (controls localStorage memory window per popup).
+					// Default 30 minutes when missing/invalid; 0 disables memory.
+					$dismiss_for_ms = 30 * 60 * 1000;
+					if ( '' !== $dismiss_for ) {
+						if ( '0' === $dismiss_for ) {
+							$dismiss_for_ms = 0;
+						} elseif ( preg_match( '/^(\d+(?:\.\d+)?)\s*s$/i', $dismiss_for, $m ) ) {
+							// Match number followed by 's' (seconds) - e.g. "10s", "2.5s"
+							$dismiss_for_ms = (int) floor( (float) $m[1] * 1000 );
+						} elseif ( preg_match( '/^(\d+(?:\.\d+)?)\s*m$/i', $dismiss_for, $m ) ) {
+							// Match number followed by 'm' (minutes) - e.g. "30m", "0.5m"
+							$dismiss_for_ms = (int) floor( (float) $m[1] * 60 * 1000 );
+						} elseif ( preg_match( '/^(\d+(?:\.\d+)?)\s*h$/i', $dismiss_for, $m ) ) {
+							// Match number followed by 'h' (hours) - e.g. "1h", "1.5h" 
+							$dismiss_for_ms = (int) floor( (float) $m[1] * 60 * 60 * 1000 );
+						} elseif ( preg_match( '/^(\d+(?:\.\d+)?)\s*ms$/i', $dismiss_for, $m ) ) {
+							// Match number followed by 'ms' (milliseconds) - e.g. "5000ms"
+							$dismiss_for_ms = (int) floor( (float) $m[1] );
+						} elseif ( preg_match( '/^\d+$/', $dismiss_for ) ) {
+							// Match bare number (milliseconds) - e.g. "1800000"
+							$dismiss_for_ms = (int) $dismiss_for;
 						}
 					}
 
@@ -273,11 +310,12 @@ if ( ! function_exists( 'bl_gosmartmodal_shortcode' ) ) {
 					}
 
 					$sections[] = [
-						'trigger'      => $trigger,
-						'idle_seconds' => $idle_seconds,
-						'position'     => in_array( $position, [ 'top', 'center', 'bottom' ], true ) ? $position : 'center',
-						'dismiss_ms'   => $dismiss_ms,
-						'html'         => $inner_html,
+						'trigger'        => $trigger,
+						'idle_seconds'   => $idle_seconds,
+						'position'       => in_array( $position, [ 'top', 'center', 'bottom' ], true ) ? $position : 'center',
+						'dismiss_ms'     => $dismiss_ms,
+						'dismiss_for_ms' => max( 0, (int) $dismiss_for_ms ),
+						'html'           => $inner_html,
 					];
 				}
 			}
@@ -365,7 +403,8 @@ GOSM_CSS;
         // Before showing, honor localStorage dismissal (cross-page + current page)
         if(overlay._dismissReason){
             const id = overlay.id || '';
-            if(store.isDismissedNow(id, overlay._dismissReason)){
+            const memMs = parseInt(overlay.getAttribute('data-dismiss-for-ms')||'0',10);
+            if(memMs > 0 && store.isDismissedNow(id, overlay._dismissReason)){
                 console.log('skipping show due to dismissal');
                 return;
             }
@@ -380,9 +419,12 @@ GOSM_CSS;
             overlay._dismissTimer = setTimeout(function(){ close(overlay); }, ms);
         }
 
-        // When shown via exit/idle, set a 30-minute dismissal flag
+        // When shown via exit/idle, set a dismissal flag for configured duration
         if(overlay._dismissReason){
-            store.setUntil(overlay.id || '', overlay._dismissReason, 30*60*1000);
+            const memoryMs = parseInt(overlay.getAttribute('data-dismiss-for-ms')||'0',10);
+            if(memoryMs > 0){
+                store.setUntil(overlay.id || '', overlay._dismissReason, memoryMs);
+            }
         }
 
         // Focus trap entry point (focus first focusable)
@@ -536,8 +578,9 @@ GOSM_CSS;
                 reasonKey = 'idle:' + secs;
             }
 
-            // If this overlay was dismissed within the last 30 min, skip wiring it
-            if(reasonKey && store.isDismissedNow(overlay.id || '', reasonKey)){
+            // If this overlay was dismissed within the configured window, skip wiring it
+            const memoryMsInit = parseInt(overlay.getAttribute('data-dismiss-for-ms')||'0',10);
+            if(reasonKey && memoryMsInit > 0 && store.isDismissedNow(overlay.id || '', reasonKey)){
                 return;
             }
 
@@ -574,10 +617,10 @@ GOSM_JS;
 			$idle_attr       = 'idle' === $sec['trigger'] ? ' data-idle-seconds="' . esc_attr( (string) $sec['idle_seconds'] ) . '"' : '';
 			$dismiss_attr    = $sec['dismiss_ms'] > 0 ? ' data-dismiss-ms="' . esc_attr( (string) $sec['dismiss_ms'] ) . '"' : ' data-dismiss-ms="0"';
 			$position_attr   = ' data-position="' . esc_attr( $pos_class ) . '"';
+			$memory_attr     = ' data-dismiss-for-ms="' . esc_attr( (string) ( $sec['dismiss_for_ms'] ?? ( 30 * 60 * 1000 ) ) ) . '"';
 			$container_style = ' style="max-width:' . esc_attr( $width_css ) . '"';
 
-			$html  = '';
-			$html .= '<div class="gosmartmodal-overlay" role="dialog" aria-modal="true" aria-hidden="true" id="' . esc_attr( $overlay_id ) . '" data-trigger="' . $trigger_attr . '"' . $idle_attr . $dismiss_attr . $position_attr . '>';
+			$html  = '<div class="gosmartmodal-overlay" role="dialog" aria-modal="true" aria-hidden="true" id="' . esc_attr( $overlay_id ) . '" data-trigger="' . $trigger_attr . '"' . $idle_attr . $dismiss_attr . $position_attr . $memory_attr . '>';
 			$html .= '  <div class="gosmartmodal-backdrop" aria-hidden="true"></div>';
 			$html .= '  <div class="gosmartmodal-container"' . $container_style . '>';
 			$html .= '    <button type="button" class="gosmartmodal-close" aria-label="Close"></button>';
