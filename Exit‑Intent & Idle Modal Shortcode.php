@@ -48,15 +48,56 @@
  *
  * What each part means
  * - Shortcode wrapper: [gosmartmodal width="700" id="welcome-offer"] ... [/gosmartmodal]
- *   • width: limits the popup’s max width. Accepts a number (pixels) or CSS value like 70vw.
- *   • id: a unique identifier so we can remember dismissals for 30 minutes. Use letters/numbers.
+ *   • width: limits the popup’s max width.
+ *       - Number only → treated as pixels (e.g., 700 → 700px)
+ *       - CSS length value → e.g., 70vw, 90%, 40rem, 32em, 720px
+ *       - Default: 700 (px)
+ *       - Note: complex CSS functions like calc() are not supported here.
+ *   • id: unique identifier used to remember dismissals for 30 minutes.
+ *       - Allowed characters: letters, numbers, underscore, hyphen
+ *       - Default: auto‑generated unique id
+ *       - Reusing the same id across pages shares the 30‑minute dismissal memory.
  *
  * - Inner blocks: each <div> inside controls one popup instance with its own settings.
- *   • open_on:
- *       - "exit" → show when the cursor heads toward the browser’s top bar (desktop only)
- *       - "idle:N" → show after N seconds without movement/typing/scrolling
- *   • position: "top", "center" (default), or "bottom"
- *   • dismiss: auto‑close time. Examples: "10s", "5000ms", or "10000"
+ *   • open_on (required): when to open this popup.
+ *       - "exit" or "exit-intent" → show on exit intent (desktop only)
+ *       - "idle:N" → show after N seconds of no mouse/keyboard/scroll activity
+ *           • N can be a whole number or decimal (e.g., idle:3, idle:2.5)
+ *   • position: where the popup sits on screen.
+ *       - "top", "center" (default), or "bottom"
+ *   • dismiss: auto‑close timer for this popup.
+ *       - Seconds: "10s", "2.5s"
+ *       - Milliseconds with unit: "5000ms"
+ *       - Bare milliseconds: "10000"
+ *       - Omit or set to 0/empty to disable auto‑close
+ *
+ * Full attribute reference (quick lookup)
+ * - [gosmartmodal] wrapper attributes
+ *   • width (string|number): max content width. Accepts integer (px) or a CSS length keyword like 70vw, 90%, 40rem, 32em, 720px. Default: 700.
+ *   • id (string): unique slug used to scope 30‑minute dismissal memory. Allowed: A–Z, a–z, 0–9, _, -. Default: generated.
+ * - Inner <div> attributes (one overlay per <div>)
+ *   • open_on (string, required): "exit", "exit-intent", or "idle:N" (N seconds, decimals allowed).
+ *   • position (string): "top" | "center" | "bottom". Default: "center".
+ *   • dismiss (string|number): "Xs" (seconds), "Yms" (milliseconds), or bare number in ms. Default: no auto‑close.
+ *
+ * Examples
+ * - Exit intent with bottom position and no auto‑close:
+ *     <div open_on="exit" position="bottom">
+ *       ...
+ *     </div>
+ * - Idle after 2.5 seconds, auto‑close after 6 seconds, at the top:
+ *     <div open_on="idle:2.5" position="top" dismiss="6s">...</div>
+ * - Idle after 8 seconds with dismiss set via milliseconds:
+ *     <div open_on="idle:8" dismiss="8000">...</div>
+ *
+ * Behavior notes
+ * - Dismissal memory: When a popup opens via exit/idle, it won’t open again for 30 minutes
+ *   for the same [gosmartmodal id] + reason ("exit" or "idle:N"). Use a different id to
+ *   treat it as a separate campaign.
+ * - Accessibility: role="dialog", aria-modal="true", ESC key closes. Focus moves to the
+ *   close button on open. Clicking backdrop closes.
+ * - Links with class .gosmartmodalbutton close the popup first, then navigate. #hash links
+ *   smooth‑scroll after closing.
  *
  * Styling and classes you can reuse
  * - .gosmartmodalcoupon → just a bold helper for coupon codes
