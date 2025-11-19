@@ -913,7 +913,7 @@ class Bld_Go_PricingTable {
             .go-pt-features { list-style: none; padding: 0; margin: .25rem 0 0 0; display: grid; gap: .35rem; }
             .go-pt-feature { display: grid; grid-template-columns: 20px 1fr; align-items: start; gap: .5rem; }
             .go-pt-feature__icon { color: var(--go-pt-green); font-weight: 800; }
-            .go-pt-feature__text { color: var(--go-pt-text); }
+            .go-pt-feature__text { color: var(--go-pt-text); text-align:left; }
 
             /* Accessibility focus */
             .go-pt-btn:focus,
@@ -960,7 +960,7 @@ class Bld_Go_PricingTable {
                         const annual = parseFloat(String(termsForSites.Annual).replace(/[$,]/g, '')) || 0;
                         const monthlyDerived = annual / 12;
                         if (priceAmount) priceAmount.textContent = money(monthlyDerived);
-                        if (priceTerm)   priceTerm.textContent   = 'per month';
+                        if (priceTerm)   priceTerm.textContent   = 'per month (paid annually)';
                         if (priceSub)    priceSub.textContent    = `${money(annual)} per year`;
                     } else {
                         if (priceAmount) priceAmount.textContent = price != null ? money(price) : '—';
@@ -1021,7 +1021,7 @@ class Bld_Go_PricingTable {
                             toggle.setAttribute('aria-pressed', 'false');
                             labelMonthly.classList.add('is-active');
                             labelAnnually.classList.remove('is-active');
-                            if (saveBanner) { saveBanner.style.display = ''; saveBanner.textContent = `Switch to yearly and save up to ${ui.save_pct || 0}%`; }
+                            if (saveBanner) { saveBanner.style.display = ''; saveBanner.textContent = `Switch to Pay Annually and save up to ${ui.save_pct || 0}%`; }
                         }
 
                         container.querySelectorAll('[data-go-pt="card"]').forEach(card => {
