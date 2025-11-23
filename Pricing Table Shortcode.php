@@ -36,6 +36,8 @@
  *       cache_ttl="21600"
  *       site_tiers_label="Single Site|Up to 3 Sites|Up to 10 Sites"
  *       bearer_constant="FS_API_TOKEN"
+ *       coupon="123,456"
+ *       discount="$10" | "15%"
  *    ]
  *      ...one or more child plan shortcodes...
  *    [/gopricingtable]
@@ -64,6 +66,10 @@
  *      Values: usd (default), eur, gbp.
  *    - cache_ttl
  *      What: How long to keep automatic pricing (in seconds). Default: 21600 (6 hours). Use 0 to always refresh.
+ *    - coupon
+ *      What: Optional comma-separated list of Freemius coupon IDs to apply (automatic Freemius mode only). They will be stacked in the order provided.
+ *    - discount
+ *      What: Manual/empty modes only. Discount to show in pricing and banners. Use "$10" for flat or "15%" for percentage. Can be overridden per plan.
  *    - site_tiers_label
  *      What: Optional list of labels for the site tiers in automatic mode (pipe‑separated).
  *      Example: "Single Site|Up to 3 Sites|Up to 10 Sites".
@@ -152,7 +158,7 @@
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
-	exit;
+    exit;
 }
 
 
@@ -160,660 +166,1181 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Class responsible for managing and rendering a pricing table.
  */
 class Bld_Go_PricingTable {
-	/**
-	 * Singleton instance.
-	 *
-	 * @var Bld_Go_PricingTable|null
-	 */
-	private static $instance = null;
-	/**
-	 * Whether the assets have already been printed.
-	 *
-	 * @var bool
-	 */
-	private $assets_printed = false;
+    /**
+     * Singleton instance.
+     *
+     * @var Bld_Go_PricingTable|null
+     */
+    private static $instance = null;
+    /**
+     * Whether the assets have already been printed.
+     *
+     * @var bool
+     */
+    private $assets_printed = false;
 
-	/**
-	 * Retrieves the singleton instance of the class.
-	 *
-	 * @return self The single instance of the class.
-	 */
-	public static function get() {
-		if ( null === self::$instance ) {
-			self::$instance = new self();
-		}
-		return self::$instance;
-	}
+    /**
+     * Retrieves the singleton instance of the class.
+     *
+     * @return self The single instance of the class.
+     */
+    public static function get() {
+        if ( null === self::$instance ) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
 
-	/**
-	 * Registers the 'init' action hook.
-	 *
-	 * Adds the 'on_init' method to the WordPress 'init' action hook.
-	 *
-	 * @return void
-	 */
-	public function register() {
-		add_action( 'init', [ $this, 'on_init' ] );
-	}
+    /**
+     * Registers the 'init' action hook.
+     *
+     * Adds the 'on_init' method to the WordPress 'init' action hook.
+     *
+     * @return void
+     */
+    public function register() {
+        add_action( 'init', [ $this, 'on_init' ] );
+    }
 
-	/**
-	 * Initializes shortcodes used by the class.
-	 *
-	 * @return void
-	 */
-	public function on_init() {
-		add_shortcode( 'gopricingtable', [ $this, 'render_parent' ] );
-		// Child becomes a no-op; parent will parse its attributes directly.
-		add_shortcode( 'go_plan_column', '__return_empty_string' );
-	}
+    /**
+     * Initializes shortcodes used by the class.
+     *
+     * @return void
+     */
+    public function on_init() {
+        add_shortcode( 'gopricingtable', [ $this, 'render_parent' ] );
+        // Child becomes a no-op; parent will parse its attributes directly.
+        add_shortcode( 'go_plan_column', '__return_empty_string' );
+    }
 
-	// --- Utilities ---
+    // --- Utilities ---
 
-	/**
-	 * Parses a pipe-separated string and returns an array of trimmed, decoded elements.
-	 *
-	 * @param mixed $raw The raw pipe-separated string to be parsed.
-	 * @return array An array of trimmed and HTML entity-decoded elements. If the input string is empty or contains only whitespace, an empty array is returned.
-	 */
-	public function parse_pipe_list( $raw ) {
-		$raw = (string) $raw;
-		if ( '' === trim( $raw ) ) {
-			return [];
-		}
-		$parts = explode( '|', $raw );
-		$out   = [];
-		foreach ( $parts as $p ) {
-			$p = trim( $p );
-			if ( '' !== $p ) {
-				$out[] = html_entity_decode( $p, ENT_QUOTES );
-			}
-		}
-		return $out;
-	}
+    /**
+     * Parses a pipe-separated string and returns an array of trimmed, decoded elements.
+     *
+     * @param mixed $raw The raw pipe-separated string to be parsed.
+     * @return array An array of trimmed and HTML entity-decoded elements. If the input string is empty or contains only whitespace, an empty array is returned.
+     */
+    public function parse_pipe_list( $raw ) {
+        $raw = (string) $raw;
+        if ( '' === trim( $raw ) ) {
+            return [];
+        }
+        $parts = explode( '|', $raw );
+        $out   = [];
+        foreach ( $parts as $p ) {
+            $p = trim( $p );
+            if ( '' !== $p ) {
+                $out[] = html_entity_decode( $p, ENT_QUOTES );
+            }
+        }
+        return $out;
+    }
 
-	/**
-	 * Converts a formatted money string into a float.
-	 *
-	 * @param string $s The money string to convert, which may include symbols, commas, or spaces.
-	 * @return float The numeric representation of the money string. Returns 0.0 if the input is not numeric.
-	 */
-	public function money_to_float( $s ): float {
-		$s = str_replace( [ '$', ',', ' ' ], '', trim( (string) $s ) );
-		return is_numeric( $s ) ? (float) $s : 0.0;
-	}
+    /**
+     * Converts a formatted money string into a float.
+     *
+     * @param string $s The money string to convert, which may include symbols, commas, or spaces.
+     * @return float The numeric representation of the money string. Returns 0.0 if the input is not numeric.
+     */
+    public function money_to_float( $s ): float {
+        $s = str_replace( [ '$', ',', ' ' ], '', trim( (string) $s ) );
+        return is_numeric( $s ) ? (float) $s : 0.0;
+    }
 
-	/**
-	 * Fetches the Freemius pricing table for a given product.
-	 *
-	 * @param string $product_id The Freemius product ID.
-	 * @param string $currency The currency code (default is 'USD'). Supported values are 'USD', 'EUR', and 'GBP'.
-	 * @param int    $cache_ttl The time-to-live for the cached response in seconds (default is 21600).
-	 * @param string $bearer The Freemius API token for authentication.
-	 *
-	 * @return array|WP_Error The pricing table as an associative array on success, or a WP_Error object on failure.
-	 */
-	public function fetch_freemius_pricing_table( $product_id, $currency = 'USD', $cache_ttl = 21600, $bearer = '' ) {
-		$product_id = trim( $product_id );
-		if ( '' === $product_id ) {
-			return new WP_Error( 'go_pt_fs_missing_product', 'Missing Freemius product_id.' );
-		}
-		if ( '' === trim( $bearer ) ) {
-			return new WP_Error( 'go_pt_fs_missing_token', 'Missing Freemius API token.' );
-		}
+    /**
+     * Fetches the Freemius pricing table for a given product.
+     *
+     * @param string $product_id The Freemius product ID.
+     * @param string $currency The currency code (default is 'USD'). Supported values are 'USD', 'EUR', and 'GBP'.
+     * @param int    $cache_ttl The time-to-live for the cached response in seconds (default is 21600).
+     * @param string $bearer The Freemius API token for authentication.
+     *
+     * @return array|WP_Error The pricing table as an associative array on success, or a WP_Error object on failure.
+     */
+    public function fetch_freemius_pricing_table( $product_id, $currency = 'USD', $cache_ttl = 21600, $bearer = '' ) {
+        $product_id = trim( $product_id );
+        if ( '' === $product_id ) {
+            return new WP_Error( 'go_pt_fs_missing_product', 'Missing Freemius product_id.' );
+        }
+        if ( '' === trim( $bearer ) ) {
+            return new WP_Error( 'go_pt_fs_missing_token', 'Missing Freemius API token.' );
+        }
 
-		$endpoint = sprintf( 'https://api.freemius.com/v1/products/%s/pricing.json', rawurlencode( $product_id ) );
-		$currency = strtoupper( trim( $currency ) );
-		if ( ! in_array( $currency, [ 'USD', 'EUR', 'GBP' ], true ) ) {
-			return new WP_Error( 'go_pt_fs_invalid_currency', 'Invalid currency code. Supported: USD, EUR, GBP.' );
-		}
-		$url = add_query_arg(
-			[
-				'currency'    => $currency,
-				'type'        => 'visible',
-				'is_enriched' => 'true',
-			],
-			$endpoint
-		);
+        $endpoint = sprintf( 'https://api.freemius.com/v1/products/%s/pricing.json', rawurlencode( $product_id ) );
+        $currency = strtoupper( trim( $currency ) );
+        if ( ! in_array( $currency, [ 'USD', 'EUR', 'GBP' ], true ) ) {
+            return new WP_Error( 'go_pt_fs_invalid_currency', 'Invalid currency code. Supported: USD, EUR, GBP.' );
+        }
+        $url = add_query_arg(
+                [
+                        'currency'    => $currency,
+                        'type'        => 'visible',
+                        'is_enriched' => 'true',
+                ],
+                $endpoint
+        );
 
-		$cache_key = 'bld_go_pt_fs_' . md5( $url );
-		if ( $cache_ttl > 0 ) {
-			$cached = get_transient( $cache_key );
-			if ( $cached ) {
-				return $cached;
-			}
-		}
+        $cache_key = 'bld_go_pt_fs_' . md5( $url );
+        if ( $cache_ttl > 0 ) {
+            $cached = get_transient( $cache_key );
+            if ( $cached ) {
+                return $cached;
+            }
+        }
 
-		$args = [
-			'timeout' => 20,
-			'headers' => [
-				'Accept'        => 'application/json',
-				'Authorization' => 'Bearer ' . $bearer,
-			],
-		];
+        $args = [
+                'timeout' => 20,
+                'headers' => [
+                        'Accept'        => 'application/json',
+                        'Authorization' => 'Bearer ' . $bearer,
+                ],
+        ];
 
-		$resp = wp_remote_get( $url, $args );
-		if ( is_wp_error( $resp ) ) {
-			return $resp;
-		}
-		$code = (int) wp_remote_retrieve_response_code( $resp );
-		if ( $code < 200 || $code >= 300 ) {
-			return new WP_Error( 'go_pt_fs_http_' . $code, 'Freemius API error: HTTP ' . $code );
-		}
-		$body = wp_remote_retrieve_body( $resp );
-		$data = json_decode( $body, true );
-		if ( ! is_array( $data ) ) {
-			return new WP_Error( 'go_pt_fs_bad_json', 'Freemius API returned invalid JSON.' );
-		}
+        $resp = wp_remote_get( $url, $args );
+        if ( is_wp_error( $resp ) ) {
+            return $resp;
+        }
+        $code = (int) wp_remote_retrieve_response_code( $resp );
+        if ( $code < 200 || $code >= 300 ) {
+            return new WP_Error( 'go_pt_fs_http_' . $code, 'Freemius API error: HTTP ' . $code );
+        }
+        $body = wp_remote_retrieve_body( $resp );
+        $data = json_decode( $body, true );
+        if ( ! is_array( $data ) ) {
+            return new WP_Error( 'go_pt_fs_bad_json', 'Freemius API returned invalid JSON.' );
+        }
 
-		if ( $cache_ttl > 0 ) {
-			set_transient( $cache_key, $data, $cache_ttl );
-		}
+        if ( $cache_ttl > 0 ) {
+            set_transient( $cache_key, $data, $cache_ttl );
+        }
 
-		return $data;
-	}
+        return $data;
+    }
 
-	/**
-	 * Transforms Freemius pricing data into a structured format for product plans.
-	 *
-	 * @param array $fs_data The Freemius data containing product and pricing information.
-	 * @param array $labels_override Optional. An associative array of custom label overrides for site tiers.
-	 *
-	 * @return array An associative array containing 'product' details and 'plans' information.
-	 */
-	public function transform_fs_pricing_to_plans( $fs_data, $labels_override = [] ) {
-		$product = [
-			'product_name' => '',
-			'public_key'   => '',
-		];
-		if ( isset( $fs_data['plugin'] ) && is_array( $fs_data['plugin'] ) ) {
-			$product['product_name'] = (string) ( $fs_data['plugin']['title'] ?? '' );
-			$product['public_key']   = (string) ( $fs_data['plugin']['public_key'] ?? '' );
-		}
+    /**
+     * Fetch a single Freemius coupon (enriched) for the given product.
+     *
+     * @param string $product_id The Freemius product ID.
+     * @param string $coupon_id  The Freemius coupon ID.
+     * @param string $currency   The currency code (default is 'USD'). Supported values are 'USD', 'EUR', and 'GBP'.
+     * @param int    $cache_ttl  The time-to-live for the cached response in seconds (default is 21600).
+     * @param string $bearer     The Freemius API token for authentication.
+     *
+     * @return array|WP_Error The coupon details as an associative array on success, or a WP_Error object on failure.
+     */
+    public function fetch_freemius_coupon( $product_id, $coupon_id, $currency = 'USD', $cache_ttl = 21600, $bearer = '' ) {
+        $product_id = trim( $product_id );
+        $coupon_id  = trim( $coupon_id );
+        if ( '' === $product_id || '' === $coupon_id ) {
+            return new WP_Error( 'go_pt_fs_coupon_missing_params', 'Missing Freemius product_id or coupon_id.' );
+        }
+        if ( '' === trim( $bearer ) ) {
+            return new WP_Error( 'go_pt_fs_coupon_missing_token', 'Missing Freemius API token.' );
+        }
 
-		$plans_out     = [];
-		$best_plan_idx = -1;
-		$best_plan_pct = -1;
+        $endpoint = sprintf(
+                'https://api.freemius.com/v1/products/%s/coupons/%s.json',
+                rawurlencode( $product_id ),
+                rawurlencode( $coupon_id )
+        );
 
-		$plans = $fs_data['plans'] ?? [];
-		foreach ( $plans as $idx => $pl ) {
-			if ( ! is_array( $pl ) ) {
-				continue;
-			}
-			$plan_id    = isset( $pl['id'] ) ? (string) $pl['id'] : '';
-			$plan_title = (string) ( $pl['title'] ?? ( $pl['name'] ?? '' ) );
-			if ( '' === $plan_id || '' === $plan_title ) {
-				continue;
-			}
+        $currency = strtoupper( trim( $currency ) );
+        if ( ! in_array( $currency, [ 'USD', 'EUR', 'GBP' ], true ) ) {
+            $currency = 'USD';
+        }
 
-			$pricing    = is_array( $pl['pricing'] ?? null ) ? $pl['pricing'] : [];
-			$site_tiers = [];
-			$terms      = [];
-			foreach ( $pricing as $p_idx => $p ) {
-				if ( ! is_array( $p ) ) {
-					continue;
-				}
-				$licenses = (int) ( $p['licenses'] ?? 0 );
-				if ( $licenses <= 0 ) {
-					continue;
-				}
-				if ( isset( $labels_override[ $p_idx ] ) ) {
-					$label = (string) $labels_override[ $p_idx ];
-				} else {
-					$label = ( 1 === $licenses ) ? 'Single Site' : ( 'Up to ' . $licenses . ' Sites' );
-				}
-				$site_tiers[ $label ] = (string) $licenses;
+        $url = add_query_arg(
+                [
+                        'is_enriched' => 'true',
+                        'currency'    => $currency,
+                ],
+                $endpoint
+        );
 
-				$row = [];
-				if ( isset( $p['monthly_price'] ) && '' !== $p['monthly_price'] ) {
-					$row['Monthly'] = (float) $p['monthly_price'];
-				}
-				if ( isset( $p['annual_price'] ) && '' !== $p['annual_price'] ) {
-					$row['Annual'] = (float) $p['annual_price'];
-				}
-				if ( ! empty( $row ) ) {
-					$terms[ (string) $licenses ] = $row;
-				}
-			}
+        $cache_key = 'bld_go_pt_fs_coupon_' . md5( $url );
+        if ( $cache_ttl > 0 ) {
+            $cached = get_transient( $cache_key );
+            if ( $cached ) {
+                return $cached;
+            }
+        }
 
-			if ( empty( $terms ) ) {
-				continue;
-			}
+        $args = [
+                'timeout' => 20,
+                'headers' => [
+                        'Accept'        => 'application/json',
+                        'Authorization' => 'Bearer ' . $bearer,
+                ],
+        ];
 
-			$has_trial = false;
-			if ( isset( $pl['trial_period'] ) ) {
-				$has_trial = ( (int) $pl['trial_period'] ) > 0;
-			}
+        $resp = wp_remote_get( $url, $args );
+        if ( is_wp_error( $resp ) ) {
+            return $resp;
+        }
+        $code = (int) wp_remote_retrieve_response_code( $resp );
+        if ( $code < 200 || $code >= 300 ) {
+            return new WP_Error( 'go_pt_fs_coupon_http_' . $code, 'Freemius API error: HTTP ' . $code );
+        }
+        $body = wp_remote_retrieve_body( $resp );
+        $data = json_decode( $body, true );
+        if ( ! is_array( $data ) ) {
+            return new WP_Error( 'go_pt_fs_coupon_bad_json', 'Freemius API returned invalid JSON for coupon.' );
+        }
 
-			$plan_pct = 0;
-			foreach ( $terms as $row ) {
-				if ( isset( $row['Monthly'], $row['Annual'] ) && $row['Monthly'] > 0 && $row['Annual'] > 0 ) {
-					$pct = round( max( 0, ( $row['Monthly'] * 12 ) - $row['Annual'] ) / ( $row['Monthly'] * 12 ) * 100 );
-					if ( $pct > $plan_pct ) {
-						$plan_pct = $pct;
-					}
-				}
-			}
+        if ( $cache_ttl > 0 ) {
+            set_transient( $cache_key, $data, $cache_ttl );
+        }
 
-			$desc     = (string) ( $pl['description'] ?? '' );
-			$features = [];
-			if ( isset( $pl['features'] ) && is_array( $pl['features'] ) ) {
-				foreach ( $pl['features'] as $f ) {
-					if ( is_array( $f ) ) {
-						$title = (string) ( $f['title'] ?? ( $f['name'] ?? '' ) );
-						if ( '' !== $title ) {
-							$features[] = $title;
-						}
-					}
-				}
-			}
+        return $data;
+    }
 
-			$is_featured = ! empty( $pl['is_featured'] );
-			if ( ! $is_featured && $plan_pct > $best_plan_pct ) {
-				$best_plan_pct = $plan_pct;
-				$best_plan_idx = $idx;
-			}
+    /**
+     * Parse a comma-separated list of coupon IDs.
+     *
+     * @param string $raw Raw string.
+     * @return array Sanitized list of coupon IDs (strings).
+     */
+    public function parse_coupon_ids( $raw ) {
+        $out = [];
+        foreach ( explode( ',', (string) $raw ) as $id ) {
+            $id = trim( $id );
+            if ( '' === $id ) {
+                continue;
+            }
+            $out[] = $id;
+        }
+        return array_values( array_unique( $out ) );
+    }
 
-			$plans_out[] = [
-				'plan_name'  => $plan_title,
-				'plan_id'    => $plan_id,
-				'best_value' => $is_featured,
-				'site_tiers' => $site_tiers,
-				'terms'      => $terms,
-				'desc'       => $desc,
-				'features'   => $features,
-				'has_trial'  => $has_trial,
-			];
-		}
+    /**
+     * Parse a discount string like "$10" or "15%".
+     *
+     * @param string $raw Raw discount string.
+     * @return array|null Array with keys type ('dollar'|'percentage') and amount (float) or null if invalid.
+     */
+    public function parse_discount_string( $raw ) {
+        $raw = trim( (string) $raw );
+        if ( '' === $raw ) {
+            return null;
+        }
+        if ( preg_match( '/^\\$\\s*([0-9]+(?:\\.[0-9]+)?)$/', $raw, $m ) ) {
+            return [
+                    'type'   => 'dollar',
+                    'amount' => (float) $m[1],
+            ];
+        }
+        if ( preg_match( '/^([0-9]+(?:\\.[0-9]+)?)\\s*%$/', $raw, $m ) ) {
+            return [
+                    'type'   => 'percentage',
+                    'amount' => (float) $m[1],
+            ];
+        }
+        return null;
+    }
 
-		$any_featured = false;
-		foreach ( $plans_out as $p ) {
-			if ( ! empty( $p['best_value'] ) ) {
-				$any_featured = true;
-				break;
-			}
-		}
-		if ( ! $any_featured && $best_plan_idx >= 0 && isset( $plans_out[ $best_plan_idx ] ) ) {
-			$plans_out[ $best_plan_idx ]['best_value'] = true;
-		}
+    /**
+     * Normalize a coupon response into a structured array for evaluation.
+     *
+     * @param array  $coupon   Raw coupon array.
+     *
+     * @return array Normalized coupon details.
+     */
+    public function normalize_coupon_record( $coupon ) {
+        if ( ! is_array( $coupon ) ) {
+            return [ 'is_valid' => false ];
+        }
 
-		return [
-			'product' => $product,
-			'plans'   => $plans_out,
-		];
-	}
+        $discount_type = strtolower( (string) ( $coupon['discount_type'] ?? '' ) );
+        if ( ! in_array( $discount_type, [ 'percentage', 'dollar' ], true ) ) {
+            $discount_type = '';
+        }
+        $discount_val = $this->money_to_float( $coupon['discount'] ?? 0 );
+        $discount_map = [];
+        if ( isset( $coupon['discounts'] ) && is_array( $coupon['discounts'] ) ) {
+            foreach ( [ 'usd', 'eur', 'gbp' ] as $cur ) {
+                if ( isset( $coupon['discounts'][ $cur ] ) ) {
+                    $discount_map[ $cur ] = $this->money_to_float( $coupon['discounts'][ $cur ] );
+                }
+            }
+        }
 
-	/**
-	 * Parses the provided content to extract and process child shortcodes, generating structured data for plans.
-	 *
-	 * @param string $content Content string to parse for child shortcodes.
-	 * @return array An array of parsed plan details, including metadata, features, site tiers, terms, and other attributes.
-	 */
-	protected function parse_child_shortcodes( $content ) {
-		if ( '' === trim( $content ) ) {
-			return [];
-		}
+        $plans_raw  = isset( $coupon['plans'] ) ? explode( ',', (string) $coupon['plans'] ) : [];
+        $plans_list = [];
+        foreach ( $plans_raw as $pid ) {
+            $pid = trim( $pid );
+            if ( '' !== $pid ) {
+                $plans_list[] = $pid;
+            }
+        }
 
-		$plans   = [];
-		$pattern = get_shortcode_regex( [ 'go_plan_column' ] );
-		if ( preg_match_all( '/' . $pattern . '/s', $content, $matches, PREG_SET_ORDER ) ) {
-			foreach ( $matches as $m ) {
-				// $m[3] is the attributes string, $m[5] is the inner content (unused here)
-				$atts_raw = $m[3] ?? '';
-				$atts     = shortcode_parse_atts( $atts_raw );
-				if ( ! is_array( $atts ) ) {
-					$atts = [];
-				}
+        $licenses_raw  = isset( $coupon['licenses'] ) ? explode( ',', (string) $coupon['licenses'] ) : [];
+        $licenses_list = [];
+        foreach ( $licenses_raw as $lic ) {
+            $lic = trim( $lic );
+            if ( '' !== $lic ) {
+                $licenses_list[] = (int) $lic;
+            }
+        }
 
-				// Normalize keys to lowercase to make attributes case-insensitive.
-				$norm = [];
-				foreach ( $atts as $k => $v ) {
-					$norm[ strtolower( (string) $k ) ] = is_scalar( $v ) ? (string) $v : '';
-				}
+        $cycles_raw = isset( $coupon['billing_cycles'] ) ? explode( ',', (string) $coupon['billing_cycles'] ) : [];
+        $cycles     = [];
+        foreach ( $cycles_raw as $c ) {
+            $c = trim( $c );
+            if ( '' === $c ) {
+                continue;
+            }
+            $label = $this->coupon_cycle_label_from_value( $c );
+            if ( $label ) {
+                $cycles[] = $label;
+            }
+        }
 
-				$plan_name        = $norm['plan_name'] ?? '';
-				$plan_id          = $norm['plan_id'] ?? '';
-				$site_tiers_label = $norm['site_tiers_label'] ?? ( $norm['site_tierslabel'] ?? '' );
-				$site_tiers_vals  = $norm['site_tiers'] ?? ( $norm['site_tiersvalue'] ?? '' );
-				$monthly          = $norm['monthly'] ?? '';
-				$annual           = $norm['annual'] ?? '';
-				$plan_desc        = $norm['plan_desc'] ?? '';
-				$plan_features    = $norm['plan_features'] ?? '';
-				$best_value_raw   = $norm['best_value'] ?? '';
-				$has_trial_raw    = $norm['has_trial'] ?? 'true';
+        $start_ts = null;
+        if ( ! empty( $coupon['start_date'] ) ) {
+            $tmp = strtotime( (string) $coupon['start_date'] );
+            if ( false !== $tmp ) {
+                $start_ts = $tmp;
+            }
+        }
+        $end_ts = null;
+        if ( ! empty( $coupon['end_date'] ) ) {
+            $tmp = strtotime( (string) $coupon['end_date'] );
+            if ( false !== $tmp ) {
+                $end_ts = $tmp;
+            }
+        }
 
-				$labels    = array_map( 'trim', $this->parse_pipe_list( $site_tiers_label ) );
-				$tiers     = array_map( 'trim', $this->parse_pipe_list( $site_tiers_vals ) );
-				$monthly_a = array_map( 'trim', $this->parse_pipe_list( $monthly ) );
-				$annual_a  = array_map( 'trim', $this->parse_pipe_list( $annual ) );
-				$features  = $this->parse_pipe_list( $plan_features );
+        $redemptions       = (int) ( $coupon['redemptions'] ?? 0 );
+        $redemptions_limit = isset( $coupon['redemptions_limit'] ) ? (int) $coupon['redemptions_limit'] : null;
 
-				$site_tiers_map = [];
-				$count          = max( count( $labels ), count( $tiers ) );
-				for ( $i = 0; $i < $count; $i++ ) {
-					$label                    = $labels[ $i ] ?? ( $tiers[ $i ] ?? (string) ( $i + 1 ) );
-					$val                      = $tiers[ $i ] ?? (string) ( $i + 1 );
-					$site_tiers_map[ $label ] = $val;
-				}
+        $is_active = ! empty( $coupon['is_active'] );
+        $now       = time();
+        if ( $start_ts && $now < $start_ts ) {
+            $is_active = false;
+        }
+        if ( $end_ts && $now > $end_ts ) {
+            $is_active = false;
+        }
+        if ( null !== $redemptions_limit && $redemptions >= $redemptions_limit ) {
+            $is_active = false;
+        }
 
-				$terms     = [];
-				$max_terms = max( count( $tiers ), count( $monthly_a ), count( $annual_a ) );
-				for ( $i = 0; $i < $max_terms; $i++ ) {
-					$site = isset( $tiers[ $i ] ) ? (string) $tiers[ $i ] : (string) ( $i + 1 );
-					$row  = [];
-					if ( isset( $monthly_a[ $i ] ) && '' !== $monthly_a[ $i ] ) {
-						$row['Monthly'] = $monthly_a[ $i ];
-					}
-					if ( isset( $annual_a[ $i ] ) && '' !== $annual_a[ $i ] ) {
-						$row['Annual'] = $annual_a[ $i ];
-					}
-					if ( ! empty( $row ) ) {
-						$terms[ $site ] = $row;
-					}
-				}
+        $code = (string) ( $coupon['code'] ?? '' );
 
-				$best_value = false;
-				if ( '' !== $best_value_raw ) {
-					$bv         = strtolower( trim( $best_value_raw ) );
-					$best_value = in_array( $bv, [ '1', 'true', 'yes', 'on' ], true );
-				}
-				$has_trial = true;
-				if ( '' !== $has_trial_raw ) {
-					$ht        = strtolower( trim( $has_trial_raw ) );
-					$has_trial = ! in_array( $ht, [ '0', 'false', 'no', 'off' ], true );
-				}
+        return [
+                'is_valid'          => $is_active && '' !== $code && '' !== $discount_type && ( $discount_val > 0 || ! empty( $discount_map ) ),
+                'id'                => (string) ( $coupon['id'] ?? '' ),
+                'code'              => $code,
+                'discount_type'     => $discount_type,
+                'discount'          => $discount_val,
+                'discounts'         => $discount_map,
+                'plans'             => $plans_list,
+                'licenses'          => $licenses_list,
+                'cycles'            => $cycles,
+                'redemptions_limit' => $redemptions_limit,
+                'redemptions'       => $redemptions,
+                'start_ts'          => $start_ts,
+                'end_ts'            => $end_ts,
+        ];
+    }
 
-				$plan = [
-					'plan_name'  => (string) $plan_name,
-					'plan_id'    => (string) $plan_id,
-					'best_value' => $best_value,
-					'site_tiers' => $site_tiers_map,
-					'terms'      => $terms,
-					'desc'       => (string) $plan_desc,
-					'features'   => $features,
-					'has_trial'  => $has_trial,
-				];
+    /**
+     * Map Freemius billing cycle values to internal labels.
+     *
+     * @param string|int $val Billing cycle value.
+     * @return string|null
+     */
+    private function coupon_cycle_label_from_value( $val ) {
+        $val = (string) $val;
+        if ( '1' === $val || 'monthly' === strtolower( $val ) ) {
+            return 'Monthly';
+        }
+        if ( '12' === $val || 'annual' === strtolower( $val ) || 'yearly' === strtolower( $val ) ) {
+            return 'Annual';
+        }
+        return null;
+    }
 
-				if ( '' !== $plan['plan_id'] || '' !== $plan['plan_name'] ) {
-					$plans[] = $plan;
-				}
-			}
-		}
+    /**
+     * Determine if a coupon applies to a plan.
+     *
+     * @param array  $coupon Normalized coupon data.
+     * @param string $plan_id Current plan ID.
+     * @return bool
+     */
+    private function coupon_supports_plan( $coupon, $plan_id ) {
+        if ( empty( $coupon['plans'] ) ) {
+            return true;
+        }
+        return in_array( (string) $plan_id, $coupon['plans'], true );
+    }
 
-		return $plans;
-	}
+    /**
+     * Determine if a coupon applies to the requested licenses count.
+     *
+     * @param array $coupon Normalized coupon data.
+     * @param int   $licenses License count.
+     * @return bool
+     */
+    private function coupon_supports_license( $coupon, $licenses ) {
+        if ( empty( $coupon['licenses'] ) ) {
+            return true;
+        }
+        if ( in_array( 0, $coupon['licenses'], true ) ) {
+            return true;
+        }
+        return in_array( (int) $licenses, $coupon['licenses'], true );
+    }
 
-	// --- Rendering ---
+    /**
+     * Determine if a coupon applies to the billing cycle.
+     *
+     * @param array  $coupon Normalized coupon data.
+     * @param string $cycle  Cycle label ('Monthly'|'Annual').
+     * @return bool
+     */
+    private function coupon_supports_cycle( $coupon, $cycle ) {
+        if ( empty( $coupon['cycles'] ) ) {
+            return true;
+        }
+        return in_array( $cycle, $coupon['cycles'], true );
+    }
 
-	/**
-	 * Renders the parent pricing table with various configuration options.
-	 *
-	 * @param array       $atts {
-	 *           Array of attributes for configuring the pricing table.
-	 *           - public_key (string): The public key used for Freemius integration.
-	 *           - product_name (string): The name of the product being showcased.
-	 *           - product_id (string): The unique identifier for the product.
-	 *           - freemius (string): Defines Freemius mode, options are '', 'manual', or 'automatic'.
-	 *           - buy_url (string): The URL used for purchasing the product when Freemius mode is empty.
-	 *           - trial_url (string): The URL for a trial option when Freemius mode is empty.
-	 *           - product_prefix (string): Prefix used to generate predictable button IDs.
-	 *           - currency (string): The pricing currency for automatic mode. Default is 'usd'.
-	 *           - cache_ttl (int): Cache duration (in seconds) for automatic mode API data. Default is 21600 (6 hours).
-	 *           - site_tiers_label (string): Optional override for site tier labels in automatic mode.
-	 *           - bearer_constant (string): The name of a constant storing the Freemius Bearer token for authentication.
-	 *       }.
-	 * @param string|null $content Content passed to child shortcodes. Used in manual Freemius mode.
-	 * @return string The generated HTML for the pricing table or an error message if configuration is invalid.
-	 */
-	public function render_parent( $atts, $content = null ) {
-		$a = shortcode_atts(
-			[
-				'public_key'       => '',
-				'product_name'     => '',
-				'product_id'       => '',
-				'freemius'         => '', // '', 'manual', 'automatic'
-				'buy_url'          => '', // used when freemius is empty. requires full url including http(s)://
-				'trial_url'        => '', // used when freemius is empty. requires full url including http(s)://
-				'product_prefix'   => '', // used to generate predictable button IDs
-				// Automatic mode optional controls:
-				'currency'         => 'usd', // pricing currency for automatic mode
-				'cache_ttl'        => '21600', // seconds (6h) for automatic mode API cache
-				'site_tiers_label' => '', // optional global labels override for automatic mode
-				'bearer_constant'  => '', // name of a defined() constant that stores the Freemius Bearer token
-			],
-			$atts,
-			'gopricingtable'
-		);
+    /**
+     * Get the fixed discount value for a currency, if present.
+     *
+     * @param array  $coupon   Normalized coupon data.
+     * @param string $currency Currency code (lowercase).
+     * @return float
+     */
+    private function coupon_fixed_amount( $coupon, $currency ) {
+        if ( isset( $coupon['discounts'][ $currency ] ) ) {
+            return (float) $coupon['discounts'][ $currency ];
+        }
+        return (float) ( $coupon['discount'] ?? 0 );
+    }
 
-		$freemius_mode = strtolower( trim( (string) $a['freemius'] ) );
-		if ( in_array( $freemius_mode, [ 'manual', 'automatic' ], true ) ) {
-			wp_enqueue_script( 'freemius-checkout', 'https://checkout.freemius.com/js/v1/', [], null, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion
-		}
+    /**
+     * Apply stacked coupons to plan pricing.
+     *
+     * @param array  $plans    Plans array.
+     * @param array  $coupons  Normalized coupon array.
+     * @param string $currency Currency code (lowercase).
+     * @return array Adjusted pricing map.
+     */
+    public function apply_coupons_to_pricing( $plans, $coupons, $currency = 'usd' ) {
+        $currency = strtolower( $currency );
+        $out      = [];
 
-		$auto_product_name = '';
-		$auto_public_key   = '';
+        foreach ( $plans as $pl ) {
+            $plan_id = (string) ( $pl['plan_id'] ?? '' );
+            if ( '' === $plan_id ) {
+                continue;
+            }
+            $out[ $plan_id ] = [];
+            foreach ( $pl['terms'] as $licenses => $term_row ) {
+                $current_monthly = isset( $term_row['Monthly'] ) ? $this->money_to_float( $term_row['Monthly'] ) : null;
+                $current_annual  = isset( $term_row['Annual'] ) ? $this->money_to_float( $term_row['Annual'] ) : null;
 
-		if ( 'automatic' === $freemius_mode ) {
-			$product_id = (string) $a['product_id'];
-			if ( '' === trim( $product_id ) ) {
-				return '<div class="go-pt-error">Automatic mode requires product_id.</div>';
-			}
-			$const_name = trim( (string) $a['bearer_constant'] );
-			if ( '' === $const_name ) {
-				return '<div class="go-pt-error">Automatic mode requires bearer_constant (the name of a defined API token constant).</div>';
-			}
-			if ( ! defined( $const_name ) ) {
-				return '<div class="go-pt-error">Freemius API token constant not defined: ' . esc_html( $const_name ) . '.</div>';
-			}
-			$bearer = (string) constant( $const_name );
-			if ( '' === trim( $bearer ) ) {
-				return '<div class="go-pt-error">Freemius API token is empty.</div>';
-			}
-			$currency = strtolower( preg_replace( '/[^a-z]/i', '', (string) $a['currency'] ) );
-			if ( '' === $currency ) {
-				$currency = 'usd';
-			}
-			$cache_ttl = (int) $a['cache_ttl'];
-			if ( $cache_ttl < 0 ) {
-				$cache_ttl = 0;
-			}
+                $licenses_int = (int) $licenses;
 
-			$fs_data = $this->fetch_freemius_pricing_table( $product_id, $currency, $cache_ttl, $bearer );
-			if ( is_wp_error( $fs_data ) ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( 'GO Pricing Table automatic mode error: ' . $fs_data->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				}
-				return '<div class="go-pt-error">Unable to load pricing at the moment.</div>';
-			}
+                foreach ( [ 'Monthly', 'Annual' ] as $cycle ) {
+                    if ( 'Monthly' === $cycle && null === $current_monthly ) {
+                        continue;
+                    }
+                    if ( 'Annual' === $cycle && null === $current_annual ) {
+                        continue;
+                    }
+                    $base_price = ( 'Monthly' === $cycle ) ? $current_monthly : $current_annual;
+                    $final      = $base_price;
+                    $applied    = [];
 
-			$labels_override   = $this->parse_pipe_list( (string) $a['site_tiers_label'] );
-			$transformed       = $this->transform_fs_pricing_to_plans( $fs_data, $labels_override );
-			$plans             = $transformed['plans'];
-			$auto_product_name = $transformed['product']['product_name'] ?? '';
-			$auto_public_key   = $transformed['product']['public_key'] ?? '';
-		} else {
-			$plans = $this->parse_child_shortcodes( (string) $content );
-		}
+                    foreach ( $coupons as $coupon ) {
+                        if ( empty( $coupon['is_valid'] ) ) {
+                            continue;
+                        }
+                        if ( ! $this->coupon_supports_plan( $coupon, $plan_id ) ) {
+                            continue;
+                        }
+                        if ( ! $this->coupon_supports_license( $coupon, $licenses_int ) ) {
+                            continue;
+                        }
+                        if ( ! $this->coupon_supports_cycle( $coupon, $cycle ) ) {
+                            continue;
+                        }
 
-		if ( empty( $plans ) ) {
-			return '<div class="go-pt-error">No plans found in [gopricingtable].</div>';
-		}
+                        $amount_off = 0.0;
+                        if ( 'percentage' === $coupon['discount_type'] ) {
+                            $amount_off = $final * ( (float) ( $coupon['discount'] ?? 0 ) / 100 );
+                        } elseif ( 'dollar' === $coupon['discount_type'] ) {
+                            $amount_off = $this->coupon_fixed_amount( $coupon, $currency );
+                        }
 
-		// Compute global site tiers
-		$global_site_tiers = [];
-		foreach ( $plans as $pl ) {
-			foreach ( $pl['site_tiers'] as $label => $licenses ) {
-				if ( ! isset( $global_site_tiers[ $label ] ) ) {
-					$global_site_tiers[ $label ] = $licenses;
-				}
-			}
-		}
+                        $amount_off = max( 0.0, $amount_off );
+                        $amount_off = min( $final, $amount_off );
+                        $final     -= $amount_off;
 
-		// Compute save pct
-		$save_pct = 0;
-		foreach ( $plans as $pl ) {
-			foreach ( $pl['terms'] as $t ) {
-				if ( ! isset( $t['Monthly'], $t['Annual'] ) ) {
-					continue;
-				}
-				$m        = $this->money_to_float( $t['Monthly'] );
-				$annually = $this->money_to_float( $t['Annual'] );
-				if ( $m > 0 && $annually > 0 ) {
-					$pct = round( max( 0, ( $m * 12 ) - $annually ) / ( $m * 12 ) * 100 );
-					if ( $pct > $save_pct ) {
-						$save_pct = $pct;
-					}
-				}
-			}
-		}
+                        if ( $amount_off > 0 ) {
+                            $applied[] = [
+                                    'id'          => $coupon['id'],
+                                    'code'        => $coupon['code'],
+                                    'type'        => $coupon['discount_type'],
+                                    'scope'       => empty( $coupon['plans'] ) ? 'global' : 'plan',
+                                    'amount_off'  => $amount_off,
+                                    'cycle'       => $cycle,
+                                    'license'     => $licenses_int,
+                                    'plan_id'     => $plan_id,
+                                    'base_price'  => $base_price,
+                                    'final_price' => $final,
+                            ];
+                        }
+                    }
 
-		// Prepare predictable prefix for button IDs
-		$prefix = (string) $a['product_prefix'];
-		if ( '' === trim( $prefix ) ) {
-			$fallback = (string) ( ( $auto_product_name ?: $a['product_name'] ) ?: 'go-pt' );
-			$prefix   = strtolower( preg_replace( '/[^a-z0-9]+/i', '-', $fallback ) );
-			$prefix   = trim( $prefix, '-' );
-		}
+                    $out[ $plan_id ][ $licenses ][ $cycle ] = [
+                            'base'    => $base_price,
+                            'final'   => $final,
+                            'applied' => $applied,
+                    ];
+                }
+            }
+        }
 
-		$payload = [
-			'product'           => [
-				'product_name' => (string) ( $auto_product_name ?: $a['product_name'] ),
-				'product_id'   => (string) $a['product_id'],
-				'public_key'   => (string) ( $auto_public_key ?: $a['public_key'] ),
-			],
-			'plans'             => $plans,
-			'global_site_tiers' => $global_site_tiers,
-			'ui'                => [
-				'default_cycle' => 'Annual',
-				'save_pct'      => $save_pct,
-			],
-			'freemius'          => $freemius_mode,
-			'urls'              => [
-				'buy'   => (string) $a['buy_url'],
-				'trial' => (string) $a['trial_url'],
-			],
-			'ident'             => [
-				'prefix' => $prefix,
-			],
-		];
+        return $out;
+    }
 
-		ob_start();
-		?>
-		<section class="go-pt" data-component="go-pricing-table">
-			<div class="go-pt-toggle" role="group" aria-label="Billing cycle">
-				<span class="go-pt-toggle__label" data-go-pt="label-monthly">Pay monthly</span>
-				<button class="go-pt-toggle__switch" type="button" aria-pressed="true" data-go-pt="cycle-switch">
-					<span class="go-pt-toggle__knob" aria-hidden="true"></span>
-				</button>
-				<span class="go-pt-toggle__label is-active" data-go-pt="label-annually">Pay annually</span>
-				<span class="go-pt-toggle__save" data-go-pt="save-banner">Save up to <?php echo esc_html( $save_pct ); ?>%</span>
-			</div>
+    /**
+     * Transforms Freemius pricing data into a structured format for product plans.
+     *
+     * @param array $fs_data The Freemius data containing product and pricing information.
+     * @param array $labels_override Optional. An associative array of custom label overrides for site tiers.
+     *
+     * @return array An associative array containing 'product' details and 'plans' information.
+     */
+    public function transform_fs_pricing_to_plans( $fs_data, $labels_override = [] ) {
+        $product = [
+                'product_name' => '',
+                'public_key'   => '',
+        ];
+        if ( isset( $fs_data['plugin'] ) && is_array( $fs_data['plugin'] ) ) {
+            $product['product_name'] = (string) ( $fs_data['plugin']['title'] ?? '' );
+            $product['public_key']   = (string) ( $fs_data['plugin']['public_key'] ?? '' );
+        }
 
-			<div class="go-pt-grid" data-go-pt="grid">
-				<?php
-				foreach ( $plans as $idx => $pl ) :
-					$plan_key = 'plan-' . ( $idx + 1 );
-					$is_best  = ! empty( $pl['best_value'] );
-					?>
-					<article class="go-pt-card <?php echo $is_best ? 'is-best' : ''; ?>" data-go-pt="card" data-plan-key="<?php echo esc_attr( $plan_key ); ?>" data-plan-id="<?php echo esc_attr( $pl['plan_id'] ); ?>" data-plan-name="<?php echo esc_attr( $pl['plan_name'] ); ?>">
-						<?php if ( $is_best ) : ?>
-							<div class="go-pt-card__badge">Best Value</div>
-						<?php endif; ?>
+        $plans_out     = [];
+        $best_plan_idx = -1;
+        $best_plan_pct = -1;
 
-						<header class="go-pt-card__header">
-							<h3 class="go-pt-card__title"><?php echo esc_html( $pl['plan_name'] ); ?></h3>
-							<div class="go-pt-card__price" data-go-pt="price">
-								<span class="go-pt-card__price-amount" data-go-pt="price-amount">—</span>
-								<span class="go-pt-card__price-term" data-go-pt="price-term">per year</span>
-								<span class="go-pt-card__price-sub" data-go-pt="price-sub"></span>
-							</div>
-						</header>
+        $plans = $fs_data['plans'] ?? [];
+        foreach ( $plans as $idx => $pl ) {
+            if ( ! is_array( $pl ) ) {
+                continue;
+            }
+            $plan_id    = isset( $pl['id'] ) ? (string) $pl['id'] : '';
+            $plan_title = (string) ( $pl['title'] ?? ( $pl['name'] ?? '' ) );
+            if ( '' === $plan_id || '' === $plan_title ) {
+                continue;
+            }
 
-						<div class="go-pt-card__controls">
-							<?php
-							$tiers = $pl['site_tiers'];
-							if ( count( $tiers ) > 1 ) :
-								?>
-								<label class="go-pt-card__label" for="<?php echo esc_attr( $plan_key ); ?>-tier">Sites</label>
-								<select class="go-pt-card__select" id="<?php echo esc_attr( $plan_key ); ?>-tier" data-go-pt="tier-select">
-									<?php foreach ( $tiers as $label => $val ) : ?>
-										<option value="<?php echo esc_attr( $val ); ?>"><?php echo esc_html( $label ); ?></option>
-									<?php endforeach; ?>
-								</select>
-							<?php
-							else :
-								$label = array_key_first( $tiers );
-								$val   = $tiers[ $label ];
-								?>
-								<div class="go-pt-card__tier" data-go-pt="tier-static" data-tier-value="<?php echo esc_attr( $val ); ?>">
-									<?php echo esc_html( $label ); ?>
-								</div>
-							<?php endif; ?>
-						</div>
+            $pricing    = is_array( $pl['pricing'] ?? null ) ? $pl['pricing'] : [];
+            $site_tiers = [];
+            $terms      = [];
+            foreach ( $pricing as $p_idx => $p ) {
+                if ( ! is_array( $p ) ) {
+                    continue;
+                }
+                $licenses = (int) ( $p['licenses'] ?? 0 );
+                if ( $licenses <= 0 ) {
+                    continue;
+                }
+                if ( isset( $labels_override[ $p_idx ] ) ) {
+                    $label = (string) $labels_override[ $p_idx ];
+                } else {
+                    $label = ( 1 === $licenses ) ? 'Single Site' : ( 'Up to ' . $licenses . ' Sites' );
+                }
+                $site_tiers[ $label ] = (string) $licenses;
 
-						<div class="go-pt-card__cta">
-							<?php $btn_base_id = $prefix . '-' . strtolower( preg_replace( '/[^a-z0-9]+/i', '-', (string) $pl['plan_name'] ) ); ?>
-							<button id="<?php echo esc_attr( $btn_base_id ); ?>-buy-button" class="go-pt-btn go-pt-btn--buy <?php echo $is_best ? 'go-pt-btn--best' : ''; ?>"
-							        data-go-pt="buy"
-							        data-plan-id="<?php echo esc_attr( $pl['plan_id'] ); ?>"
-							        data-plan-name="<?php echo esc_attr( $pl['plan_name'] ); ?>">
-								Buy Now
-							</button>
-							<?php if ( ! empty( $pl['has_trial'] ) ) : ?>
-								<button id="<?php echo esc_attr( $btn_base_id ); ?>-trial-button" class="go-pt-btn go-pt-btn--trial <?php echo $is_best ? 'go-pt-btn--best-alt' : ''; ?>"
-								        data-go-pt="trial"
-								        data-plan-id="<?php echo esc_attr( $pl['plan_id'] ); ?>"
-								        data-plan-name="<?php echo esc_attr( $pl['plan_name'] ); ?>">
-									Free Trial
-								</button>
-							<?php endif; ?>
-						</div>
+                $row = [];
+                if ( isset( $p['monthly_price'] ) && '' !== $p['monthly_price'] ) {
+                    $row['Monthly'] = (float) $p['monthly_price'];
+                }
+                if ( isset( $p['annual_price'] ) && '' !== $p['annual_price'] ) {
+                    $row['Annual'] = (float) $p['annual_price'];
+                }
+                if ( ! empty( $row ) ) {
+                    $terms[ (string) $licenses ] = $row;
+                }
+            }
 
-						<?php if ( ! empty( $pl['desc'] ) ) : ?>
-							<p class="go-pt-card__desc"><?php echo esc_html( $pl['desc'] ); ?></p>
-						<?php endif; ?>
+            if ( empty( $terms ) ) {
+                continue;
+            }
 
-						<?php if ( ! empty( $pl['features'] ) ) : ?>
-							<ul class="go-pt-features" data-go-pt="features">
-								<?php foreach ( $pl['features'] as $feat ) : ?>
-									<li class="go-pt-feature">
-										<span class="go-pt-feature__icon" aria-hidden="true">✓</span>
-										<span class="go-pt-feature__text"><?php echo esc_html( $feat ); ?></span>
-									</li>
-								<?php endforeach; ?>
-								<li class="go-pt-feature" data-go-pt="live-sites">
-									<span class="go-pt-feature__icon" aria-hidden="true">✓</span>
-									<span class="go-pt-feature__text">Use on up to <strong data-go-pt="live-sites-count">—</strong> live sites</span>
-								</li>
-							</ul>
-						<?php endif; ?>
-					</article>
-				<?php endforeach; ?>
-			</div>
+            $has_trial = false;
+            if ( isset( $pl['trial_period'] ) ) {
+                $has_trial = ( (int) $pl['trial_period'] ) > 0;
+            }
 
-			<script type="application/json" class="go-pt-data"><?php echo wp_json_encode( $payload ); ?></script>
-		</section>
-		<?php
+            $plan_pct = 0;
+            foreach ( $terms as $row ) {
+                if ( isset( $row['Monthly'], $row['Annual'] ) && $row['Monthly'] > 0 && $row['Annual'] > 0 ) {
+                    $pct = round( max( 0, ( $row['Monthly'] * 12 ) - $row['Annual'] ) / ( $row['Monthly'] * 12 ) * 100 );
+                    if ( $pct > $plan_pct ) {
+                        $plan_pct = $pct;
+                    }
+                }
+            }
 
-		// Print CSS + JS once per page load
-		if ( ! $this->assets_printed ) {
-			$this->assets_printed = true;
-			$this->render_assets_once();
-		}
+            $desc     = (string) ( $pl['description'] ?? '' );
+            $features = [];
+            if ( isset( $pl['features'] ) && is_array( $pl['features'] ) ) {
+                foreach ( $pl['features'] as $f ) {
+                    if ( is_array( $f ) ) {
+                        $title = (string) ( $f['title'] ?? ( $f['name'] ?? '' ) );
+                        if ( '' !== $title ) {
+                            $features[] = $title;
+                        }
+                    }
+                }
+            }
 
-		return ob_get_clean();
-	}
+            $is_featured = ! empty( $pl['is_featured'] );
+            if ( ! $is_featured && $plan_pct > $best_plan_pct ) {
+                $best_plan_pct = $plan_pct;
+                $best_plan_idx = $idx;
+            }
 
-	/**
-	 * Renders the necessary assets (CSS and JavaScript) for the page, ensuring they are included only once.
-	 *
-	 * This method generates inline styles and JavaScript for the component functionality,
-	 * including but not limited to features such as toggles, grids, and dynamic content updates.
-	 *
-	 * @return void
-	 */
-	private function render_assets_once() {
-		?>
-		<style>
+            $plans_out[] = [
+                    'plan_name'  => $plan_title,
+                    'plan_id'    => $plan_id,
+                    'best_value' => $is_featured,
+                    'site_tiers' => $site_tiers,
+                    'terms'      => $terms,
+                    'desc'       => $desc,
+                    'features'   => $features,
+                    'has_trial'  => $has_trial,
+            ];
+        }
+
+        $any_featured = false;
+        foreach ( $plans_out as $p ) {
+            if ( ! empty( $p['best_value'] ) ) {
+                $any_featured = true;
+                break;
+            }
+        }
+        if ( ! $any_featured && $best_plan_idx >= 0 && isset( $plans_out[ $best_plan_idx ] ) ) {
+            $plans_out[ $best_plan_idx ]['best_value'] = true;
+        }
+
+        return [
+                'product' => $product,
+                'plans'   => $plans_out,
+        ];
+    }
+
+    /**
+     * Parses the provided content to extract and process child shortcodes, generating structured data for plans.
+     *
+     * @param string $content Content string to parse for child shortcodes.
+     * @return array An array of parsed plan details, including metadata, features, site tiers, terms, and other attributes.
+     */
+    protected function parse_child_shortcodes( $content ) {
+        if ( '' === trim( $content ) ) {
+            return [];
+        }
+
+        $plans   = [];
+        $pattern = get_shortcode_regex( [ 'go_plan_column' ] );
+        if ( preg_match_all( '/' . $pattern . '/s', $content, $matches, PREG_SET_ORDER ) ) {
+            foreach ( $matches as $m ) {
+                // $m[3] is the attributes string, $m[5] is the inner content (unused here)
+                $atts_raw = $m[3] ?? '';
+                $atts     = shortcode_parse_atts( $atts_raw );
+                if ( ! is_array( $atts ) ) {
+                    $atts = [];
+                }
+
+                // Normalize keys to lowercase to make attributes case-insensitive.
+                $norm = [];
+                foreach ( $atts as $k => $v ) {
+                    $norm[ strtolower( (string) $k ) ] = is_scalar( $v ) ? (string) $v : '';
+                }
+
+                $plan_name        = $norm['plan_name'] ?? '';
+                $plan_id          = $norm['plan_id'] ?? '';
+                $site_tiers_label = $norm['site_tiers_label'] ?? ( $norm['site_tierslabel'] ?? '' );
+                $site_tiers_vals  = $norm['site_tiers'] ?? ( $norm['site_tiersvalue'] ?? '' );
+                $monthly          = $norm['monthly'] ?? '';
+                $annual           = $norm['annual'] ?? '';
+                $plan_desc        = $norm['plan_desc'] ?? '';
+                $plan_features    = $norm['plan_features'] ?? '';
+                $best_value_raw   = $norm['best_value'] ?? '';
+                $has_trial_raw    = $norm['has_trial'] ?? 'true';
+                $plan_coupon      = $norm['coupon'] ?? '';
+                $plan_discount    = $norm['discount'] ?? '';
+
+                $labels    = array_map( 'trim', $this->parse_pipe_list( $site_tiers_label ) );
+                $tiers     = array_map( 'trim', $this->parse_pipe_list( $site_tiers_vals ) );
+                $monthly_a = array_map( 'trim', $this->parse_pipe_list( $monthly ) );
+                $annual_a  = array_map( 'trim', $this->parse_pipe_list( $annual ) );
+                $features  = $this->parse_pipe_list( $plan_features );
+
+                $site_tiers_map = [];
+                $count          = max( count( $labels ), count( $tiers ) );
+                for ( $i = 0; $i < $count; $i++ ) {
+                    $label                    = $labels[ $i ] ?? ( $tiers[ $i ] ?? (string) ( $i + 1 ) );
+                    $val                      = $tiers[ $i ] ?? (string) ( $i + 1 );
+                    $site_tiers_map[ $label ] = $val;
+                }
+
+                $terms     = [];
+                $max_terms = max( count( $tiers ), count( $monthly_a ), count( $annual_a ) );
+                for ( $i = 0; $i < $max_terms; $i++ ) {
+                    $site = isset( $tiers[ $i ] ) ? (string) $tiers[ $i ] : (string) ( $i + 1 );
+                    $row  = [];
+                    if ( isset( $monthly_a[ $i ] ) && '' !== $monthly_a[ $i ] ) {
+                        $row['Monthly'] = $monthly_a[ $i ];
+                    }
+                    if ( isset( $annual_a[ $i ] ) && '' !== $annual_a[ $i ] ) {
+                        $row['Annual'] = $annual_a[ $i ];
+                    }
+                    if ( ! empty( $row ) ) {
+                        $terms[ $site ] = $row;
+                    }
+                }
+
+                $best_value = false;
+                if ( '' !== $best_value_raw ) {
+                    $bv         = strtolower( trim( $best_value_raw ) );
+                    $best_value = in_array( $bv, [ '1', 'true', 'yes', 'on' ], true );
+                }
+                $has_trial = true;
+                if ( '' !== $has_trial_raw ) {
+                    $ht        = strtolower( trim( $has_trial_raw ) );
+                    $has_trial = ! in_array( $ht, [ '0', 'false', 'no', 'off' ], true );
+                }
+
+                $plan = [
+                        'plan_name'  => (string) $plan_name,
+                        'plan_id'    => (string) $plan_id,
+                        'best_value' => $best_value,
+                        'site_tiers' => $site_tiers_map,
+                        'terms'      => $terms,
+                        'desc'       => (string) $plan_desc,
+                        'features'   => $features,
+                        'has_trial'  => $has_trial,
+                        'coupon'     => (string) $plan_coupon,
+                        'discount'   => (string) $plan_discount,
+                ];
+
+                if ( '' !== $plan['plan_id'] || '' !== $plan['plan_name'] ) {
+                    $plans[] = $plan;
+                }
+            }
+        }
+
+        return $plans;
+    }
+
+    // --- Rendering ---
+
+    /**
+     * Renders the parent pricing table with various configuration options.
+     *
+     * @param array       $atts {
+     *           Array of attributes for configuring the pricing table.
+     *           - public_key (string): The public key used for Freemius integration.
+     *           - product_name (string): The name of the product being showcased.
+     *           - product_id (string): The unique identifier for the product.
+     *           - freemius (string): Defines Freemius mode, options are '', 'manual', or 'automatic'.
+     *           - buy_url (string): The URL used for purchasing the product when Freemius mode is empty.
+     *           - trial_url (string): The URL for a trial option when Freemius mode is empty.
+     *           - product_prefix (string): Prefix used to generate predictable button IDs.
+     *           - currency (string): The pricing currency for automatic mode. Default is 'usd'.
+     *           - cache_ttl (int): Cache duration (in seconds) for automatic mode API data. Default is 21600 (6 hours).
+     *           - site_tiers_label (string): Optional override for site tier labels in automatic mode.
+     *           - bearer_constant (string): The name of a constant storing the Freemius Bearer token for authentication.
+     *       }.
+     * @param string|null $content Content passed to child shortcodes. Used in manual Freemius mode.
+     * @return string The generated HTML for the pricing table or an error message if configuration is invalid.
+     */
+    public function render_parent( $atts, $content = null ) {
+        $a = shortcode_atts(
+                [
+                        'public_key'       => '',
+                        'product_name'     => '',
+                        'product_id'       => '',
+                        'freemius'         => '', // '', 'manual', 'automatic'
+                        'buy_url'          => '', // used when freemius is empty. requires full url including http(s)://
+                        'trial_url'        => '', // used when freemius is empty. requires full url including http(s)://
+                        'product_prefix'   => '', // used to generate predictable button IDs
+                    // Automatic mode optional controls:
+                        'currency'         => 'usd', // pricing currency for automatic mode
+                        'cache_ttl'        => '21600', // seconds (6h) for automatic mode API cache
+                        'site_tiers_label' => '', // optional global labels override for automatic mode
+                        'bearer_constant'  => '', // name of a defined() constant that stores the Freemius Bearer token
+                        'coupon'           => '', // comma-separated Freemius coupon IDs (automatic mode only)
+                        'discount'         => '', // manual/empty mode: "$10" or "15%" global discount
+                ],
+                $atts,
+                'gopricingtable'
+        );
+
+        $freemius_mode = strtolower( trim( (string) $a['freemius'] ) );
+        if ( in_array( $freemius_mode, [ 'manual', 'automatic' ], true ) ) {
+            wp_enqueue_script( 'freemius-checkout', 'https://checkout.freemius.com/js/v1/', [], null, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion
+        }
+
+        $auto_product_name = '';
+        $auto_public_key   = '';
+        $currency          = 'usd';
+        $coupon_meta       = [
+                'codes_global' => [],
+                'codes_plan'   => [],
+                'ids'          => [],
+                'stack'        => true,
+        ];
+
+        if ( 'automatic' === $freemius_mode ) {
+            $product_id = (string) $a['product_id'];
+            if ( '' === trim( $product_id ) ) {
+                return '<div class="go-pt-error">Automatic mode requires product_id.</div>';
+            }
+            $const_name = trim( (string) $a['bearer_constant'] );
+            if ( '' === $const_name ) {
+                return '<div class="go-pt-error">Automatic mode requires bearer_constant (the name of a defined API token constant).</div>';
+            }
+            if ( ! defined( $const_name ) ) {
+                return '<div class="go-pt-error">Freemius API token constant not defined: ' . esc_html( $const_name ) . '.</div>';
+            }
+            $bearer = (string) constant( $const_name );
+            if ( '' === trim( $bearer ) ) {
+                return '<div class="go-pt-error">Freemius API token is empty.</div>';
+            }
+            $currency = strtolower( preg_replace( '/[^a-z]/i', '', (string) $a['currency'] ) );
+            if ( '' === $currency ) {
+                $currency = 'usd';
+            }
+            $cache_ttl = (int) $a['cache_ttl'];
+            if ( $cache_ttl < 0 ) {
+                $cache_ttl = 0;
+            }
+
+            $fs_data = $this->fetch_freemius_pricing_table( $product_id, $currency, $cache_ttl, $bearer );
+            if ( is_wp_error( $fs_data ) ) {
+                if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                    error_log( 'GO Pricing Table automatic mode error: ' . $fs_data->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                }
+                return '<div class="go-pt-error">Unable to load pricing at the moment.</div>';
+            }
+
+            $labels_override   = $this->parse_pipe_list( (string) $a['site_tiers_label'] );
+            $transformed       = $this->transform_fs_pricing_to_plans( $fs_data, $labels_override );
+            $plans             = $transformed['plans'];
+            $auto_product_name = $transformed['product']['product_name'] ?? '';
+            $auto_public_key   = $transformed['product']['public_key'] ?? '';
+
+            // Optional coupons (automatic mode only)
+            $pricing_with_coupons = [];
+            $coupon_ids           = $this->parse_coupon_ids( (string) $a['coupon'] );
+            if ( ! empty( $coupon_ids ) ) {
+                $normalized_coupons = [];
+                foreach ( $coupon_ids as $cid ) {
+                    $coupon_raw = $this->fetch_freemius_coupon( $product_id, $cid, $currency, $cache_ttl, $bearer );
+                    if ( is_wp_error( $coupon_raw ) ) {
+                        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                            error_log( 'GO Pricing Table coupon fetch error (' . $cid . '): ' . $coupon_raw->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                        }
+                        continue;
+                    }
+                    $norm = $this->normalize_coupon_record( $coupon_raw );
+                    if ( ! empty( $norm['is_valid'] ) ) {
+                        $normalized_coupons[] = $norm;
+                        if ( empty( $norm['plans'] ) ) {
+                            $coupon_meta['codes_global'][] = $norm['code'];
+                        } else {
+                            foreach ( $norm['plans'] as $pid ) {
+                                if ( ! isset( $coupon_meta['codes_plan'][ $pid ] ) ) {
+                                    $coupon_meta['codes_plan'][ $pid ] = [];
+                                }
+                                $coupon_meta['codes_plan'][ $pid ][] = $norm['code'];
+                            }
+                        }
+                        $coupon_meta['ids'][] = $norm['id'];
+                    }
+                }
+
+                if ( ! empty( $normalized_coupons ) ) {
+                    $pricing_with_coupons = $this->apply_coupons_to_pricing( $plans, $normalized_coupons, $currency );
+                }
+            }
+        } else {
+            $plans                = $this->parse_child_shortcodes( (string) $content );
+            $pricing_with_coupons = [];
+
+            // Manual/global coupons & discounts
+            $manual_coupons = [];
+
+            $global_discount = $this->parse_discount_string( (string) $a['discount'] );
+            $global_code     = trim( (string) $a['coupon'] );
+            if ( $global_discount || '' !== $global_code ) {
+                $manual_coupons[] = [
+                        'is_valid'          => true,
+                        'id'                => 'manual-global',
+                        'code'              => '' !== $global_code ? $global_code : 'DISCOUNT',
+                        'discount_type'     => $global_discount['type'] ?? 'dollar',
+                        'discount'          => $global_discount['amount'] ?? 0,
+                        'discounts'         => [],
+                        'plans'             => [],
+                        'licenses'          => [],
+                        'cycles'            => [],
+                        'redemptions_limit' => null,
+                        'redemptions'       => 0,
+                        'start_ts'          => null,
+                        'end_ts'            => null,
+                ];
+                if ( '' !== $global_code ) {
+                    $coupon_meta['codes_global'][] = $global_code;
+                    $coupon_meta['ids'][]          = 'manual-global';
+                }
+            }
+
+            foreach ( $plans as $pl ) {
+                $plan_disc  = $this->parse_discount_string( $pl['discount'] ?? '' );
+                $plan_code  = trim( (string) ( $pl['coupon'] ?? '' ) );
+                $plan_id    = (string) ( $pl['plan_id'] ?? '' );
+                $use_coupon = ( $plan_disc || '' !== $plan_code ) && '' !== $plan_id;
+                if ( $use_coupon ) {
+                    $manual_coupons[] = [
+                            'is_valid'          => true,
+                            'id'                => 'manual-plan-' . $plan_id,
+                            'code'              => '' !== $plan_code ? $plan_code : 'DISCOUNT',
+                            'discount_type'     => $plan_disc['type'] ?? 'dollar',
+                            'discount'          => $plan_disc['amount'] ?? 0,
+                            'discounts'         => [],
+                            'plans'             => [ $plan_id ],
+                            'licenses'          => [],
+                            'cycles'            => [],
+                            'redemptions_limit' => null,
+                            'redemptions'       => 0,
+                            'start_ts'          => null,
+                            'end_ts'            => null,
+                    ];
+                    if ( '' !== $plan_code ) {
+                        if ( ! isset( $coupon_meta['codes_plan'][ $plan_id ] ) ) {
+                            $coupon_meta['codes_plan'][ $plan_id ] = [];
+                        }
+                        $coupon_meta['codes_plan'][ $plan_id ][] = $plan_code;
+                        $coupon_meta['ids'][]                    = 'manual-plan-' . $plan_id;
+                    }
+                }
+            }
+
+            if ( ! empty( $manual_coupons ) ) {
+                $pricing_with_coupons = $this->apply_coupons_to_pricing( $plans, $manual_coupons, $currency );
+            }
+        }
+
+        if ( empty( $plans ) ) {
+            return '<div class="go-pt-error">No plans found in [gopricingtable].</div>';
+        }
+
+        // Compute global site tiers
+        $global_site_tiers = [];
+        foreach ( $plans as $pl ) {
+            foreach ( $pl['site_tiers'] as $label => $licenses ) {
+                if ( ! isset( $global_site_tiers[ $label ] ) ) {
+                    $global_site_tiers[ $label ] = $licenses;
+                }
+            }
+        }
+
+        // Compute save pct
+        $save_pct = 0;
+        foreach ( $plans as $pl ) {
+            foreach ( $pl['terms'] as $t ) {
+                if ( ! isset( $t['Monthly'], $t['Annual'] ) ) {
+                    continue;
+                }
+                $m        = $this->money_to_float( $t['Monthly'] );
+                $annually = $this->money_to_float( $t['Annual'] );
+                if ( $m > 0 && $annually > 0 ) {
+                    $pct = round( max( 0, ( $m * 12 ) - $annually ) / ( $m * 12 ) * 100 );
+                    if ( $pct > $save_pct ) {
+                        $save_pct = $pct;
+                    }
+                }
+            }
+        }
+
+        // Prepare predictable prefix for button IDs
+        $prefix = (string) $a['product_prefix'];
+        if ( '' === trim( $prefix ) ) {
+            $fallback = (string) ( ( $auto_product_name ?: $a['product_name'] ) ?: 'go-pt' );
+            $prefix   = strtolower( preg_replace( '/[^a-z0-9]+/i', '-', $fallback ) );
+            $prefix   = trim( $prefix, '-' );
+        }
+
+        $payload = [
+                'product'           => [
+                        'product_name' => (string) ( $auto_product_name ?: $a['product_name'] ),
+                        'product_id'   => (string) $a['product_id'],
+                        'public_key'   => (string) ( $auto_public_key ?: $a['public_key'] ),
+                ],
+                'plans'             => $plans,
+                'global_site_tiers' => $global_site_tiers,
+                'ui'                => [
+                        'default_cycle' => 'Annual',
+                        'save_pct'      => $save_pct,
+                ],
+                'freemius'          => $freemius_mode,
+                'pricing'           => $pricing_with_coupons,
+                'coupons'           => [
+                        'codes'        => $coupon_meta['codes_global'],
+                        'codes_global' => $coupon_meta['codes_global'],
+                        'codes_plan'   => $coupon_meta['codes_plan'],
+                        'ids'          => $coupon_meta['ids'],
+                        'stack'        => true,
+                ],
+                'urls'              => [
+                        'buy'   => (string) $a['buy_url'],
+                        'trial' => (string) $a['trial_url'],
+                ],
+                'ident'             => [
+                        'prefix' => $prefix,
+                ],
+                'currency'          => strtoupper( $currency ),
+        ];
+
+        ob_start();
+        ?>
+        <section class="go-pt" data-component="go-pricing-table">
+            <div class="go-pt-toggle" role="group" aria-label="Billing cycle">
+                <span class="go-pt-toggle__label" data-go-pt="label-monthly">Pay monthly</span>
+                <button class="go-pt-toggle__switch" type="button" aria-pressed="true" data-go-pt="cycle-switch">
+                    <span class="go-pt-toggle__knob" aria-hidden="true"></span>
+                </button>
+                <span class="go-pt-toggle__label is-active" data-go-pt="label-annually">Pay annually</span>
+                <span class="go-pt-toggle__save" data-go-pt="save-banner">Save up to <?php echo esc_html( $save_pct ); ?>%</span>
+            </div>
+
+            <div class="go-pt-coupon-banner" data-go-pt="coupon-banner" aria-live="polite"></div>
+
+            <div class="go-pt-grid" data-go-pt="grid">
+                <?php
+                foreach ( $plans as $idx => $pl ) :
+                    $plan_key = 'plan-' . ( $idx + 1 );
+                    $is_best  = ! empty( $pl['best_value'] );
+                    ?>
+                    <article class="go-pt-card <?php echo $is_best ? 'is-best' : ''; ?>" data-go-pt="card" data-plan-key="<?php echo esc_attr( $plan_key ); ?>" data-plan-id="<?php echo esc_attr( $pl['plan_id'] ); ?>" data-plan-name="<?php echo esc_attr( $pl['plan_name'] ); ?>">
+                        <?php if ( $is_best ) : ?>
+                            <div class="go-pt-card__badge">Best Value</div>
+                        <?php endif; ?>
+
+                        <div class="go-pt-card__coupon" data-go-pt="card-coupon-banner" aria-live="polite"></div>
+
+                        <header class="go-pt-card__header">
+                            <h3 class="go-pt-card__title"><?php echo esc_html( $pl['plan_name'] ); ?></h3>
+                            <div class="go-pt-card__price" data-go-pt="price">
+                                <div class="go-pt-card__price-main">
+                                    <span class="go-pt-card__price-old" data-go-pt="price-old"></span>
+                                    <span class="go-pt-card__price-amount" data-go-pt="price-amount">—</span>
+                                </div>
+                                <span class="go-pt-card__price-term" data-go-pt="price-term">per year</span>
+                                <div class="go-pt-card__price-sub" data-go-pt="price-sub">
+                                    <span class="go-pt-card__price-sub-old" data-go-pt="price-sub-old"></span>
+                                    <span class="go-pt-card__price-sub-new" data-go-pt="price-sub-new"></span>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div class="go-pt-card__controls">
+                            <?php
+                            $tiers = $pl['site_tiers'];
+                            if ( count( $tiers ) > 1 ) :
+                                ?>
+                                <label class="go-pt-card__label" for="<?php echo esc_attr( $plan_key ); ?>-tier">Sites</label>
+                                <select class="go-pt-card__select" id="<?php echo esc_attr( $plan_key ); ?>-tier" data-go-pt="tier-select">
+                                    <?php foreach ( $tiers as $label => $val ) : ?>
+                                        <option value="<?php echo esc_attr( $val ); ?>"><?php echo esc_html( $label ); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            <?php
+                            else :
+                                $label = array_key_first( $tiers );
+                                $val   = $tiers[ $label ];
+                                ?>
+                                <div class="go-pt-card__tier" data-go-pt="tier-static" data-tier-value="<?php echo esc_attr( $val ); ?>">
+                                    <?php echo esc_html( $label ); ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="go-pt-card__cta">
+                            <?php $btn_base_id = $prefix . '-' . strtolower( preg_replace( '/[^a-z0-9]+/i', '-', (string) $pl['plan_name'] ) ); ?>
+                            <button id="<?php echo esc_attr( $btn_base_id ); ?>-buy-button" class="go-pt-btn go-pt-btn--buy <?php echo $is_best ? 'go-pt-btn--best' : ''; ?>"
+                                    data-go-pt="buy"
+                                    data-plan-id="<?php echo esc_attr( $pl['plan_id'] ); ?>"
+                                    data-plan-name="<?php echo esc_attr( $pl['plan_name'] ); ?>">
+                                Buy Now
+                            </button>
+                            <?php if ( ! empty( $pl['has_trial'] ) ) : ?>
+                                <button id="<?php echo esc_attr( $btn_base_id ); ?>-trial-button" class="go-pt-btn go-pt-btn--trial <?php echo $is_best ? 'go-pt-btn--best-alt' : ''; ?>"
+                                        data-go-pt="trial"
+                                        data-plan-id="<?php echo esc_attr( $pl['plan_id'] ); ?>"
+                                        data-plan-name="<?php echo esc_attr( $pl['plan_name'] ); ?>">
+                                    Free Trial
+                                </button>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php if ( ! empty( $pl['desc'] ) ) : ?>
+                            <p class="go-pt-card__desc"><?php echo esc_html( $pl['desc'] ); ?></p>
+                        <?php endif; ?>
+
+                        <?php if ( ! empty( $pl['features'] ) ) : ?>
+                            <ul class="go-pt-features" data-go-pt="features">
+                                <?php foreach ( $pl['features'] as $feat ) : ?>
+                                    <li class="go-pt-feature">
+                                        <span class="go-pt-feature__icon" aria-hidden="true">✓</span>
+                                        <span class="go-pt-feature__text"><?php echo esc_html( $feat ); ?></span>
+                                    </li>
+                                <?php endforeach; ?>
+                                <li class="go-pt-feature" data-go-pt="live-sites">
+                                    <span class="go-pt-feature__icon" aria-hidden="true">✓</span>
+                                    <span class="go-pt-feature__text">Use on up to <strong data-go-pt="live-sites-count">—</strong> live sites</span>
+                                </li>
+                            </ul>
+                        <?php endif; ?>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+
+            <script type="application/json" class="go-pt-data"><?php echo wp_json_encode( $payload ); ?></script>
+        </section>
+        <?php
+
+        // Print CSS + JS once per page load
+        if ( ! $this->assets_printed ) {
+            $this->assets_printed = true;
+            $this->render_assets_once();
+        }
+
+        return ob_get_clean();
+    }
+
+    /**
+     * Renders the necessary assets (CSS and JavaScript) for the page, ensuring they are included only once.
+     *
+     * This method generates inline styles and JavaScript for the component functionality,
+     * including but not limited to features such as toggles, grids, and dynamic content updates.
+     *
+     * @return void
+     */
+    private function render_assets_once() {
+        ?>
+        <style>
             /* Root   --go-pt-muted: #b6b2d6; */
             .go-pt {
                 --go-pt-bg: #0d0b1a;
@@ -828,6 +1355,7 @@ class Bld_Go_PricingTable {
                 color: var(--go-pt-text);
                 background: transparent;
                 font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+                position: relative;
             }
 
             /* --- Toggle --- */
@@ -845,6 +1373,53 @@ class Bld_Go_PricingTable {
             }
             .go-pt-toggle__knob{width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
             .go-pt-toggle__save{padding: 0 5px 0 5px; margin-left:.25rem;font-size:14px !important;color:#f5a623;background:black; white-space:nowrap;}
+
+            /* Coupon banner */
+            .go-pt-coupon-banner{
+                position:absolute;
+                top:0; right:0;
+                transform:translate(50%,20%) rotate(45deg);
+                background: linear-gradient(135deg, var(--go-pt-accent), var(--go-pt-accent-2));
+                color:#fff;
+                padding:.45rem 2.4rem;
+                font-weight:800;
+                letter-spacing:.05em;
+                text-transform:uppercase;
+                font-size:.85rem;
+                box-shadow:0 12px 28px rgba(0,0,0,.35);
+                z-index:3;
+                display:none;
+                pointer-events:none;
+            }
+            .go-pt-coupon-banner.is-active{display:block;}
+            @media (max-width: 899.98px) {
+                .go-pt-coupon-banner{
+                    top:0;
+                    right:0;
+                    transform:translate(55%,-55%) rotate(45deg);
+                    padding:.4rem 2rem;
+                    font-size:.8rem;
+                }
+            }
+
+            /* Plan-specific coupon bar */
+            .go-pt-card__coupon{
+                position:absolute;
+                top:-0.75rem;
+                left:50%;
+                transform:translate(-50%,-100%);
+                background: linear-gradient(135deg, var(--go-pt-accent), var(--go-pt-accent-2));
+                color:#fff;
+                padding:.35rem .9rem;
+                border-radius: 8px;
+                font-weight:700;
+                font-size:.85rem;
+                box-shadow:0 10px 22px rgba(0,0,0,.28);
+                display:none;
+                pointer-events:none;
+                white-space:nowrap;
+            }
+            .go-pt-card__coupon.is-active{display:inline-block;}
 
 
             /* Grid: desktop = columns, mobile = stacked cards */
@@ -878,9 +1453,14 @@ class Bld_Go_PricingTable {
             .go-pt-card__header { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
             .go-pt-card__title { margin: 0; font-weight: 700; font-size: 1.35rem; color:white; }
             .go-pt-card__price { text-align: right; }
-            .go-pt-card__price-amount { font-size: 1.6rem; font-weight: 800; }
+            .go-pt-card__price-main { display: flex; gap: .4rem; align-items: baseline; justify-content: flex-end; }
+            .go-pt-card__price-amount { font-size: 1.6rem; font-weight: 800; color: var(--go-pt-text); }
+            .go-pt-card__price-amount.is-discounted { color: #4ade80; }
+            .go-pt-card__price-old { font-size: .95rem; color: var(--go-pt-muted); text-decoration: line-through; opacity: .8; min-width: 0; }
             .go-pt-card__price-term { display: block; font-size: .9rem; color: var(--go-pt-muted); }
-            .go-pt-card__price-sub { display:block; font-size:.85rem; color: var(--go-pt-muted); }
+            .go-pt-card__price-sub { display:flex; gap:.35rem; justify-content:flex-end; align-items: baseline; font-size:.85rem; color: var(--go-pt-muted); }
+            .go-pt-card__price-sub-old { text-decoration: line-through; opacity: .8; }
+            .go-pt-card__price-sub-new { font-weight: 700; color: var(--go-pt-text); }
 
             /* Controls */
             .go-pt-card__controls { display: flex; align-items: center; gap: .5rem; margin-top: 1rem; }
@@ -922,9 +1502,9 @@ class Bld_Go_PricingTable {
                 outline: 2px solid var(--go-pt-accent-2);
                 outline-offset: 2px;
             }
-		</style>
+        </style>
 
-		<script>
+        <script>
             /* BrightLeaf GO Pricing Table logic v1.0.7 (inline) */
             (function () {
                 function parseDataPayload(root) {
@@ -936,37 +1516,50 @@ class Bld_Go_PricingTable {
                     const num = typeof x === 'number' ? x : parseFloat(String(x).replace(/[$,]/g, '')) || 0;
                     return '$' + num.toFixed(2);
                 }
-                function updateCardPrice(card, cycle, licenses, termsForSites) {
+                function updateCardPrice(card, cycle, licenses, priceInfo) {
                     const priceAmount = card.querySelector('[data-go-pt="price-amount"]');
+                    const priceOld    = card.querySelector('[data-go-pt="price-old"]');
                     const priceTerm   = card.querySelector('[data-go-pt="price-term"]');
-                    const priceSub    = card.querySelector('[data-go-pt="price-sub"]');
+                    const priceSubOld = card.querySelector('[data-go-pt="price-sub-old"]');
+                    const priceSubNew = card.querySelector('[data-go-pt="price-sub-new"]');
                     const liveSites   = card.querySelector('[data-go-pt="live-sites-count"]');
 
-                    let shownCycle = cycle;
-                    let price = null;
+                    const basePrice  = (priceInfo && typeof priceInfo.base === 'number') ? priceInfo.base : null;
+                    const finalPrice = (priceInfo && typeof priceInfo.final === 'number') ? priceInfo.final : basePrice;
+                    const hasDiscount = (basePrice != null && finalPrice != null && finalPrice + 1e-3 < basePrice);
 
-                    if (termsForSites && termsForSites[shownCycle] != null) {
-                        price = termsForSites[shownCycle];
-                    } else if (termsForSites) {
-                        const keys = Object.keys(termsForSites);
-                        if (keys.length) {
-                            shownCycle = keys[0];
-                            price = termsForSites[shownCycle];
+                    if (cycle === 'Annual') {
+                        const baseAnnual  = basePrice;
+                        const finalAnnual = finalPrice;
+                        const baseMonthly = baseAnnual != null ? baseAnnual / 12 : null;
+                        const finalMonthly = finalAnnual != null ? finalAnnual / 12 : null;
+
+                        if (priceAmount) priceAmount.textContent = finalMonthly != null ? money(finalMonthly) : '—';
+                        if (priceOld) {
+                            priceOld.textContent = hasDiscount && baseMonthly != null ? money(baseMonthly) : '';
+                            priceOld.style.display = priceOld.textContent ? '' : 'none';
                         }
-                    }
-                    // Pricing presentation rules:
-                    // - When cycle is Annual, show per-month prominently and annual below as subtext.
-                    if (shownCycle === 'Annual' && termsForSites && termsForSites.Annual != null) {
-                        const annual = parseFloat(String(termsForSites.Annual).replace(/[$,]/g, '')) || 0;
-                        const monthlyDerived = annual / 12;
-                        if (priceAmount) priceAmount.textContent = money(monthlyDerived);
                         if (priceTerm)   priceTerm.textContent   = 'per month (paid annually)';
-                        if (priceSub)    priceSub.textContent    = `${money(annual)} per year`;
+                        if (priceSubNew) {
+                            priceSubNew.textContent = finalAnnual != null ? money(finalAnnual) + ' per year' : '';
+                            priceSubNew.style.display = priceSubNew.textContent ? '' : 'none';
+                        }
+                        if (priceSubOld) {
+                            priceSubOld.textContent = hasDiscount && baseAnnual != null ? money(baseAnnual) + ' per year' : '';
+                            priceSubOld.style.display = priceSubOld.textContent ? '' : 'none';
+                        }
                     } else {
-                        if (priceAmount) priceAmount.textContent = price != null ? money(price) : '—';
-                        if (priceTerm)   priceTerm.textContent   = (shownCycle === 'Monthly') ? 'per month' : 'per year';
-                        if (priceSub)    priceSub.textContent    = '';
+                        if (priceAmount) priceAmount.textContent = finalPrice != null ? money(finalPrice) : '—';
+                        if (priceOld) {
+                            priceOld.textContent = hasDiscount && basePrice != null ? money(basePrice) : '';
+                            priceOld.style.display = priceOld.textContent ? '' : 'none';
+                        }
+                        if (priceTerm)   priceTerm.textContent   = 'per month';
+                        if (priceSubNew) { priceSubNew.textContent = ''; priceSubNew.style.display = 'none'; }
+                        if (priceSubOld) { priceSubOld.textContent = ''; priceSubOld.style.display = 'none'; }
                     }
+
+                    if (priceAmount) priceAmount.classList.toggle('is-discounted', !!hasDiscount);
                     if (liveSites)   liveSites.textContent   = String(licenses);
                 }
                 function syncTierDropdowns(root, selectedVal) {
@@ -975,6 +1568,18 @@ class Bld_Go_PricingTable {
                             sel.value = String(selectedVal);
                         }
                     });
+                }
+                function resolveLicenseRow(map, licenses) {
+                    if (map[String(licenses)]) return { row: map[String(licenses)], license: licenses };
+                    const candidates = Object.keys(map).map(n => parseInt(n, 10)).filter(n => !Number.isNaN(n)).sort((a, b) => a - b);
+                    if (!candidates.length) return { row: null, license: licenses };
+                    let nearest = candidates[0];
+                    let bestDiff = Math.abs(nearest - licenses);
+                    candidates.forEach(c => {
+                        const d = Math.abs(c - licenses);
+                        if (d < bestDiff) { nearest = c; bestDiff = d; }
+                    });
+                    return { row: map[String(nearest)], license: nearest };
                 }
 
                 function init(container) {
@@ -985,11 +1590,14 @@ class Bld_Go_PricingTable {
                     const plans   = data.plans || [];
                     const globalTiers = data.global_site_tiers || {};
                     const ui = data.ui || { default_cycle: 'Annual', save_pct: 0 };
+                    const pricing = data.pricing || {};
+                    const couponGlobalCodes = (data.coupons && Array.isArray(data.coupons.codes_global)) ? data.coupons.codes_global : (data.coupons && Array.isArray(data.coupons.codes) ? data.coupons.codes : []);
+                    const couponPlanCodes = (data.coupons && data.coupons.codes_plan) ? data.coupons.codes_plan : {};
 
                     let billingCycle = ui.default_cycle || 'Annual';
                     let globalTierValue = parseInt(Object.values(globalTiers)[0] || 1, 10);
 
-                    const planTerms = {};
+                    const planTermsBase = {};
                     plans.forEach(pl => {
                         const map = {};
                         Object.keys(pl.terms || {}).forEach(siteN => {
@@ -999,13 +1607,75 @@ class Bld_Go_PricingTable {
                             if (t.Annual  != null) out.Annual  = parseFloat(String(t.Annual).replace(/[$,]/g, ''))  || 0;
                             map[siteN] = out;
                         });
-                        planTerms[pl.plan_id] = map;
+                        planTermsBase[pl.plan_id] = map;
                     });
 
                     const toggle = container.querySelector('[data-go-pt="cycle-switch"]');
                     const saveBanner = container.querySelector('[data-go-pt="save-banner"]');
                     const labelMonthly  = container.querySelector('[data-go-pt="label-monthly"]');
                     const labelAnnually = container.querySelector('[data-go-pt="label-annually"]');
+                    const couponBanner = container.querySelector('[data-go-pt="coupon-banner"]');
+
+                    function getPriceInfo(planId, licenses, cycle) {
+                        const adjustedPlan = pricing[planId] || {};
+                        const basePlan = planTermsBase[planId] || {};
+                        const adjusted = resolveLicenseRow(adjustedPlan, licenses);
+                        const base = resolveLicenseRow(basePlan, licenses);
+                        const adjustedRow = adjusted.row;
+                        const baseRow = base.row;
+
+                        const slotAdjusted = adjustedRow ? adjustedRow[cycle] : null;
+                        const slotBase = baseRow ? baseRow[cycle] : null;
+
+                        const baseValue = slotBase != null
+                            ? parseFloat(slotBase)
+                            : (slotAdjusted && slotAdjusted.base != null ? parseFloat(slotAdjusted.base) : null);
+
+                        let finalValue = null;
+                        if (slotAdjusted && typeof slotAdjusted.final === 'number') {
+                            finalValue = slotAdjusted.final;
+                        } else if (slotBase != null) {
+                            finalValue = parseFloat(slotBase);
+                        }
+
+                        const applied = (slotAdjusted && Array.isArray(slotAdjusted.applied)) ? slotAdjusted.applied : [];
+
+                        return {
+                            base: baseValue,
+                            final: finalValue,
+                            applied,
+                            licenseUsed: adjusted.row ? adjusted.license : (base.row ? base.license : licenses)
+                        };
+                    }
+
+                    function updateCouponBanner() {
+                        if (!couponBanner) return;
+                        const primary = plans.find(p => p.best_value) || plans[0];
+                        if (!primary) {
+                            couponBanner.classList.remove('is-active');
+                            couponBanner.textContent = '';
+                            return;
+                        }
+                        const info = getPriceInfo(primary.plan_id, globalTierValue, billingCycle);
+                        const base = typeof info.base === 'number' ? info.base : null;
+                        const final = typeof info.final === 'number' ? info.final : null;
+                        const diff = (base != null && final != null) ? base - final : 0;
+                        const globalApplied = (info.applied || []).filter(a => a.scope !== 'plan');
+                        if (!globalApplied.length || !diff || diff <= 0) {
+                            couponBanner.classList.remove('is-active');
+                            couponBanner.textContent = '';
+                            return;
+                        }
+                        if (!diff || diff <= 0) {
+                            couponBanner.classList.remove('is-active');
+                            couponBanner.textContent = '';
+                            return;
+                        }
+                        const cycleLabel = billingCycle === 'Annual' ? 'year' : 'month';
+                        const codesLabel = (globalApplied.map(a => a.code).filter(Boolean).slice(0,3).join(' + ')) || couponGlobalCodes.slice(0,3).join(' + ');
+                        couponBanner.textContent = `${codesLabel}: -${money(diff)} this ${cycleLabel}`;
+                        couponBanner.classList.add('is-active');
+                    }
 
                     if (saveBanner) saveBanner.textContent = `Save up to ${ui.save_pct || 0}%`;
 
@@ -1013,20 +1683,19 @@ class Bld_Go_PricingTable {
                         billingCycle = cycle;
 
                         if (cycle === 'Annual') {
-                            toggle.setAttribute('aria-pressed', 'true');
-                            labelAnnually.classList.add('is-active');
-                            labelMonthly.classList.remove('is-active');
+                            if (toggle) toggle.setAttribute('aria-pressed', 'true');
+                            if (labelAnnually) labelAnnually.classList.add('is-active');
+                            if (labelMonthly) labelMonthly.classList.remove('is-active');
                             if (saveBanner) saveBanner.style.display = 'none';
                         } else {
-                            toggle.setAttribute('aria-pressed', 'false');
-                            labelMonthly.classList.add('is-active');
-                            labelAnnually.classList.remove('is-active');
+                            if (toggle) toggle.setAttribute('aria-pressed', 'false');
+                            if (labelMonthly) labelMonthly.classList.add('is-active');
+                            if (labelAnnually) labelAnnually.classList.remove('is-active');
                             if (saveBanner) { saveBanner.style.display = ''; saveBanner.textContent = `Switch to Pay Annually and save up to ${ui.save_pct || 0}%`; }
                         }
 
                         container.querySelectorAll('[data-go-pt="card"]').forEach(card => {
                             const planId = card.getAttribute('data-plan-id');
-                            const map = planTerms[planId] || {};
                             let licenses = globalTierValue;
                             const sel = card.querySelector('[data-go-pt="tier-select"]');
                             if (sel) licenses = parseInt(sel.value, 10);
@@ -1034,26 +1703,33 @@ class Bld_Go_PricingTable {
                                 const staticEl = card.querySelector('[data-go-pt="tier-static"]');
                                 if (staticEl) licenses = parseInt(staticEl.getAttribute('data-tier-value') || globalTierValue, 10);
                             }
-                            let terms = map[String(licenses)];
-                            if (!terms) {
-                                const candidates = Object.keys(map).map(n => parseInt(n,10)).sort((a,b)=>a-b);
-                                if (candidates.length) {
-                                    let nearest = candidates[0];
-                                    let bestDiff = Math.abs(nearest - licenses);
-                                    candidates.forEach(c => {
-                                        const d = Math.abs(c - licenses);
-                                        if (d < bestDiff) { nearest = c; bestDiff = d; }
-                                    });
-                                    terms = map[String(nearest)];
+                            const info = getPriceInfo(planId, licenses, billingCycle);
+                            updateCardPrice(card, billingCycle, info.licenseUsed || licenses, info);
+                            const cardBanner = card.querySelector('[data-go-pt="card-coupon-banner"]');
+                            if (cardBanner) {
+                                const planApplied = (info.applied || []).filter(a => a.scope === 'plan');
+                                const cardBase = typeof info.base === 'number' ? info.base : null;
+                                const cardFinal = typeof info.final === 'number' ? info.final : null;
+                                const cardDiff = (cardBase != null && cardFinal != null) ? cardBase - cardFinal : 0;
+                                if (planApplied.length && cardDiff > 0) {
+                                    const codesLabel = planApplied.map(a => a.code).filter(Boolean).slice(0,3).join(' + ') || (couponPlanCodes[planId] || []).slice(0,3).join(' + ');
+                                    const cycleLabel = billingCycle === 'Annual' ? 'year' : 'month';
+                                    cardBanner.textContent = `${codesLabel}: -${money(cardDiff)} this ${cycleLabel}`;
+                                    cardBanner.classList.add('is-active');
+                                } else {
+                                    cardBanner.classList.remove('is-active');
+                                    cardBanner.textContent = '';
                                 }
                             }
-                            updateCardPrice(card, billingCycle, licenses, terms);
                         });
+                        updateCouponBanner();
                     };
 
-                    toggle.addEventListener('click', () => {
-                        setCycle(billingCycle === 'Annual' ? 'Monthly' : 'Annual');
-                    });
+                    if (toggle) {
+                        toggle.addEventListener('click', () => {
+                            setCycle(billingCycle === 'Annual' ? 'Monthly' : 'Annual');
+                        });
+                    }
 
                     container.addEventListener('change', (e) => {
                         const sel = e.target.closest('[data-go-pt="tier-select"]');
@@ -1078,10 +1754,13 @@ class Bld_Go_PricingTable {
 
                     function openCheckout(button, opts) {
                         const openNow = () => {
+                            const planId = String(button.getAttribute('data-plan-id') || '');
                             const handler = new FS.Checkout({
                                 product_id: String(product.product_id || ''),
                                 public_key: String(product.public_key || '')
                             });
+                            const planCodes = (couponPlanCodes && couponPlanCodes[planId]) ? couponPlanCodes[planId] : [];
+                            const couponValue = planCodes.length ? planCodes.join(',') : (couponGlobalCodes.length ? couponGlobalCodes.join(',') : undefined);
                             handler.open({
                                 name: String(product.product_name || ''),
                                 plan_id: String(button.getAttribute('data-plan-id') || ''),
@@ -1093,6 +1772,7 @@ class Bld_Go_PricingTable {
                                 show_reviews: true,
                                 show_refund_badge: true,
                                 billing_cycle: billingCycle,
+                                coupon: couponValue,
                                 purchaseCompleted: () => {},
                                 track: () => {}
                             });
@@ -1147,11 +1827,25 @@ class Bld_Go_PricingTable {
                     });
                 }
 
-                document.querySelectorAll('[data-component="go-pricing-table"]').forEach(init);
+                function bootstrap() {
+                    document.querySelectorAll('[data-component="go-pricing-table"]').forEach(el => {
+                        if (el.getAttribute('data-go-pt-init')) return;
+                        el.setAttribute('data-go-pt-init', '1');
+                        init(el);
+                    });
+                }
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', bootstrap);
+                } else {
+                    bootstrap();
+                }
+                // safety: run again after a tick in case markup renders after script tag
+                setTimeout(bootstrap, 0);
             })();
-		</script>
-		<?php
-	}
+        </script>
+        <?php
+    }
 }
 
 // Bootstrap
