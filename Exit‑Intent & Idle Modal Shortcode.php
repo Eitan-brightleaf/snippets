@@ -10,9 +10,10 @@
  * - Work nicely with normal page content, including Gravity Forms shortcodes inside the popup.
  *
  * Features
- * - Two triggers you can use together or separately:
+ * - Three triggers you can use together or separately:
  *   • open_on="exit" → show on exit intent (desktop browsers)
  *   • open_on="idle:3" → show after 3 seconds of inactivity
+ *   • open_on="scroll:50%" → show after the visitor has scrolled 50% of the page
  * - Choose where the popup sits: position="top", "center" (default), or "bottom".
  * - Optional auto‑close timer: dismiss="10s" closes it after 10 seconds.
  * - A ready‑made Close button (×), backdrop click to close, and ESC key support.
@@ -64,6 +65,8 @@
  *       - "exit" or "exit-intent" → show on exit intent (desktop only)
  *       - "idle:N" → show after N seconds of no mouse/keyboard/scroll activity
  *           • N can be a whole number or decimal (e.g., idle:3, idle:2.5)
+ *       - "scroll:X%" → show after visitor has scrolled X percent down the page
+ *       - "scroll:Ypx" → show after visitor has scrolled Y pixels down the page
  *   • position: where the popup sits on screen.
  *       - "top", "center" (default), or "bottom"
  *   • dismiss: auto‑close timer for this popup.
@@ -85,7 +88,8 @@
  *   • width (string|number): max content width. Accepts integer (px) or a CSS length keyword like 70vw, 90%, 40rem, 32em, 720px. Default: 700.
  *   • id (string): unique slug used to scope dismissal memory per popup. Allowed: A–Z, a–z, 0–9, _, -. Default: generated.
  * - Inner <div> attributes (one overlay per <div>)
- *   • open_on (string, required): "exit", "exit-intent", or "idle:N" (N seconds, decimals allowed).
+ *   • open_on (string, required): "exit", "exit-intent", "idle:N" (N seconds, decimals allowed), or
+ *       "scroll:X%|Ypx" (X percent of page, or Y pixels from top).
  *   • position (string): "top" | "center" | "bottom". Default: "center".
  *   • dismiss (string|number): "Xs" (seconds), "Yms" (milliseconds), or bare number in ms. Default: no auto‑close.
  *   • dismiss_for (string|number): memory window after opening via exit/idle. Formats: "Xs", "Xm", "Xh", "Yms", or bare ms. 0 disables. Default: 30m.
@@ -99,11 +103,15 @@
  *     <div open_on="idle:2.5" position="top" dismiss="6s">...</div>
  * - Idle after 8 seconds with dismiss set via milliseconds:
  *     <div open_on="idle:8" dismiss="8000">...</div>
+ * - Show after scrolling 60% of the page:
+ *     <div open_on="scroll:60%">...</div>
+ * - Show after scrolling 800 pixels:
+ *     <div open_on="scroll:800px">...</div>
  *
  * Behavior notes
  * - Dismissal memory: When a popup opens via exit/idle, it won’t open again for the per‑popup
- *   dismiss_for duration (default 30 minutes) for the same [gosmartmodal id] + reason ("exit" or
- *   "idle:N"). Use a different id to treat it as a separate campaign.
+ *   dismiss_for duration (default 30 minutes) for the same [gosmartmodal id] + reason ("exit",
+ *   "idle:N", or "scroll:THRESHOLD"). Use a different id to treat it as a separate campaign.
  * - Accessibility: role="dialog", aria-modal="true", ESC key closes. Focus moves to the
  *   close button on open. Clicking backdrop closes.
  * - Links with class .gosmartmodalbutton close the popup first, then navigate. #hash links
@@ -216,12 +224,18 @@ if ( ! function_exists( 'bl_gosmartmodal_shortcode' ) ) {
 					$dismiss     = trim( (string) $node->getAttribute( 'dismiss' ) );
 					$dismiss_for = trim( (string) $node->getAttribute( 'dismiss_for' ) );
 
-					// Determine trigger type and optional idle seconds.
-					$trigger      = 'manual';
-					$idle_seconds = 0;
+					// Determine trigger type and optional parameters (idle seconds or scroll threshold).
+					$trigger       = 'manual';
+					$idle_seconds  = 0;
+					$scroll_amount = 0;
+					$scroll_unit   = '%'; // default to percent if omitted
 					if ( preg_match( '/^idle\s*:\s*(\d+(?:\.\d+)?)$/i', $open_on, $om ) ) {
 						$trigger      = 'idle';
 						$idle_seconds = (float) $om[1];
+					} elseif ( preg_match( '/^scroll\s*:\s*(\d+(?:\.\d+)?)(%|px)?$/i', $open_on, $sm ) ) {
+						$trigger       = 'scroll';
+						$scroll_amount = (float) $sm[1];
+						$scroll_unit   = isset( $sm[2] ) && in_array( strtolower( $sm[2] ), [ '%', 'px' ], true ) ? strtolower( $sm[2] ) : '%';
 					} elseif ( strtolower( $open_on ) === 'exit' || strtolower( $open_on ) === 'exit-intent' ) {
 						$trigger = 'exit';
 					}
@@ -251,7 +265,7 @@ if ( ! function_exists( 'bl_gosmartmodal_shortcode' ) ) {
 							// Match number followed by 'm' (minutes) - e.g. "30m", "0.5m"
 							$dismiss_for_ms = (int) floor( (float) $m[1] * 60 * 1000 );
 						} elseif ( preg_match( '/^(\d+(?:\.\d+)?)\s*h$/i', $dismiss_for, $m ) ) {
-							// Match number followed by 'h' (hours) - e.g. "1h", "1.5h" 
+							// Match number followed by 'h' (hours) - e.g. "1h", "1.5h"
 							$dismiss_for_ms = (int) floor( (float) $m[1] * 60 * 60 * 1000 );
 						} elseif ( preg_match( '/^(\d+(?:\.\d+)?)\s*ms$/i', $dismiss_for, $m ) ) {
 							// Match number followed by 'ms' (milliseconds) - e.g. "5000ms"
@@ -312,6 +326,8 @@ if ( ! function_exists( 'bl_gosmartmodal_shortcode' ) ) {
 					$sections[] = [
 						'trigger'        => $trigger,
 						'idle_seconds'   => $idle_seconds,
+						'scroll_amount'  => $scroll_amount,
+						'scroll_unit'    => $scroll_unit,
 						'position'       => in_array( $position, [ 'top', 'center', 'bottom' ], true ) ? $position : 'center',
 						'dismiss_ms'     => $dismiss_ms,
 						'dismiss_for_ms' => max( 0, (int) $dismiss_for_ms ),
@@ -565,6 +581,43 @@ GOSM_CSS;
             }
             attach(); idleControllers.push({detach:detach}); }
 
+    function installScroll(overlay, amount, unit){
+        amount = parseFloat(amount)||0;
+        unit = (unit||'%').toLowerCase();
+        function docMetrics(){
+            const d = document;
+            const b = d.body; const e = d.documentElement;
+            const scrollTop = window.pageYOffset || e.scrollTop || b.scrollTop || 0;
+            const viewport = window.innerHeight || e.clientHeight || 0;
+            const docHeight = Math.max(
+                b.scrollHeight, e.scrollHeight,
+                b.offsetHeight, e.offsetHeight,
+                b.clientHeight, e.clientHeight
+            );
+            const maxScrollable = Math.max(0, docHeight - viewport);
+            return { scrollTop: scrollTop, maxScrollable: maxScrollable };
+        }
+        function thresholdPx(){
+            const m = docMetrics();
+            if(unit === '%'){
+                return m.maxScrollable * (amount/100);
+            }
+            // px
+            return amount;
+        }
+        function check(){
+            const m = docMetrics();
+            const th = thresholdPx();
+            if(m.scrollTop >= th){
+                show(overlay);
+            }
+        }
+        window.addEventListener('scroll', check, {passive:true});
+        window.addEventListener('resize', check, {passive:true});
+        // Initial check in case page loads already past threshold
+        check();
+    }
+
     function init(){ const overlays = document.querySelectorAll('.gosmartmodal-overlay'); overlays.forEach(function(overlay){ installCommonHandlers(overlay);
             const trig = overlay.getAttribute('data-trigger'); const pos = overlay.getAttribute('data-position')||'center'; overlay.classList.add(pos==='top'?'pos-top':(pos==='bottom'?'pos-bottom':'pos-center'));
 
@@ -576,6 +629,11 @@ GOSM_CSS;
                 const secsAttr = overlay.getAttribute('data-idle-seconds') || '0';
                 const secs = parseFloat(secsAttr) || 0;
                 reasonKey = 'idle:' + secs;
+            } else if(trig === 'scroll'){
+                const amtAttr = overlay.getAttribute('data-scroll-amount') || '0';
+                const unit = (overlay.getAttribute('data-scroll-unit') || '%');
+                const amt = parseFloat(amtAttr) || 0;
+                reasonKey = 'scroll:' + amt + (unit||'%');
             }
 
             // If this overlay was dismissed within the configured window, skip wiring it
@@ -594,6 +652,11 @@ GOSM_CSS;
             }
             else if(trig==='idle'){
                 const secs = parseFloat(overlay.getAttribute('data-idle-seconds')||'0')||0; installIdle(overlay, secs);
+            }
+            else if(trig==='scroll'){
+                const amt = parseFloat(overlay.getAttribute('data-scroll-amount')||'0')||0;
+                const unit = (overlay.getAttribute('data-scroll-unit')||'%');
+                installScroll(overlay, amt, unit);
             }
         }); }
 
@@ -615,12 +678,15 @@ GOSM_JS;
 
 			$trigger_attr    = esc_attr( $sec['trigger'] );
 			$idle_attr       = 'idle' === $sec['trigger'] ? ' data-idle-seconds="' . esc_attr( (string) $sec['idle_seconds'] ) . '"' : '';
+			$scroll_attr     = 'scroll' === $sec['trigger']
+				? ' data-scroll-amount="' . esc_attr( (string) ( $sec['scroll_amount'] ?? 0 ) ) . '" data-scroll-unit="' . esc_attr( (string) ( $sec['scroll_unit'] ?? '%' ) ) . '"'
+				: '';
 			$dismiss_attr    = $sec['dismiss_ms'] > 0 ? ' data-dismiss-ms="' . esc_attr( (string) $sec['dismiss_ms'] ) . '"' : ' data-dismiss-ms="0"';
 			$position_attr   = ' data-position="' . esc_attr( $pos_class ) . '"';
 			$memory_attr     = ' data-dismiss-for-ms="' . esc_attr( (string) ( $sec['dismiss_for_ms'] ?? ( 30 * 60 * 1000 ) ) ) . '"';
 			$container_style = ' style="max-width:' . esc_attr( $width_css ) . '"';
 
-			$html  = '<div class="gosmartmodal-overlay" role="dialog" aria-modal="true" aria-hidden="true" id="' . esc_attr( $overlay_id ) . '" data-trigger="' . $trigger_attr . '"' . $idle_attr . $dismiss_attr . $position_attr . $memory_attr . '>';
+			$html  = '<div class="gosmartmodal-overlay" role="dialog" aria-modal="true" aria-hidden="true" id="' . esc_attr( $overlay_id ) . '" data-trigger="' . $trigger_attr . '"' . $idle_attr . $scroll_attr . $dismiss_attr . $position_attr . $memory_attr . '>';
 			$html .= '  <div class="gosmartmodal-backdrop" aria-hidden="true"></div>';
 			$html .= '  <div class="gosmartmodal-container"' . $container_style . '>';
 			$html .= '    <button type="button" class="gosmartmodal-close" aria-label="Close"></button>';
