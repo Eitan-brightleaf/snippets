@@ -1406,8 +1406,9 @@ class Bld_Go_PricingTable {
             .go-pt-card__coupon{
                 position:absolute;
                 top:-0.75rem;
-                left:50%;
-                transform:translate(-50%,-100%);
+                left:auto;
+                right:1.25rem;
+                transform:translate(0,-100%);
                 background: linear-gradient(135deg, var(--go-pt-accent), var(--go-pt-accent-2));
                 color:#fff;
                 padding:.35rem .9rem;
