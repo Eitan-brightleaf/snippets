@@ -1524,9 +1524,26 @@ class Bld_Go_PricingTable {
                     const priceSubNew = card.querySelector('[data-go-pt="price-sub-new"]');
                     const liveSites   = card.querySelector('[data-go-pt="live-sites-count"]');
 
-                    const basePrice  = (priceInfo && typeof priceInfo.base === 'number') ? priceInfo.base : null;
-                    const finalPrice = (priceInfo && typeof priceInfo.final === 'number') ? priceInfo.final : basePrice;
-                    const hasDiscount = (basePrice != null && finalPrice != null && finalPrice + 1e-3 < basePrice);
+                    let basePrice = null;
+                    if (priceInfo) {
+                        if (typeof priceInfo.base === 'number') {
+                            basePrice = priceInfo.base;
+                        }
+                    }
+                    let finalPrice = basePrice;
+                    if (priceInfo) {
+                        if (typeof priceInfo.final === 'number') {
+                            finalPrice = priceInfo.final;
+                        }
+                    }
+                    let hasDiscount = false;
+                    if (basePrice != null) {
+                        if (finalPrice != null) {
+                            if (finalPrice + 1e-3 < basePrice) {
+                                hasDiscount = true;
+                            }
+                        }
+                    }
 
                     if (cycle === 'Annual') {
                         const baseAnnual  = basePrice;
@@ -1536,7 +1553,7 @@ class Bld_Go_PricingTable {
 
                         if (priceAmount) priceAmount.textContent = finalMonthly != null ? money(finalMonthly) : '—';
                         if (priceOld) {
-                            priceOld.textContent = hasDiscount && baseMonthly != null ? money(baseMonthly) : '';
+                            priceOld.textContent = hasDiscount ? (baseMonthly != null ? money(baseMonthly) : '') : '';
                             priceOld.style.display = priceOld.textContent ? '' : 'none';
                         }
                         if (priceTerm)   priceTerm.textContent   = 'per month (paid annually)';
@@ -1545,13 +1562,13 @@ class Bld_Go_PricingTable {
                             priceSubNew.style.display = priceSubNew.textContent ? '' : 'none';
                         }
                         if (priceSubOld) {
-                            priceSubOld.textContent = hasDiscount && baseAnnual != null ? money(baseAnnual) + ' per year' : '';
+                            priceSubOld.textContent = hasDiscount ? (baseAnnual != null ? money(baseAnnual) + ' per year' : '') : '';
                             priceSubOld.style.display = priceSubOld.textContent ? '' : 'none';
                         }
                     } else {
                         if (priceAmount) priceAmount.textContent = finalPrice != null ? money(finalPrice) : '—';
                         if (priceOld) {
-                            priceOld.textContent = hasDiscount && basePrice != null ? money(basePrice) : '';
+                            priceOld.textContent = hasDiscount ? (basePrice != null ? money(basePrice) : '') : '';
                             priceOld.style.display = priceOld.textContent ? '' : 'none';
                         }
                         if (priceTerm)   priceTerm.textContent   = 'per month';
@@ -1584,15 +1601,23 @@ class Bld_Go_PricingTable {
 
                 function init(container) {
                     const data = parseDataPayload(container);
-                    if (!data) return;
+                    if (!data) {
+                        return;
+                    }
 
                     const product = data.product || {};
                     const plans   = data.plans || [];
                     const globalTiers = data.global_site_tiers || {};
                     const ui = data.ui || { default_cycle: 'Annual', save_pct: 0 };
                     const pricing = data.pricing || {};
-                    const couponGlobalCodes = (data.coupons && Array.isArray(data.coupons.codes_global)) ? data.coupons.codes_global : (data.coupons && Array.isArray(data.coupons.codes) ? data.coupons.codes : []);
-                    const couponPlanCodes = (data.coupons && data.coupons.codes_plan) ? data.coupons.codes_plan : {};
+                    const coupons = data.coupons || {};
+                    let couponGlobalCodes = [];
+                    if (Array.isArray(coupons.codes_global)) {
+                        couponGlobalCodes = coupons.codes_global;
+                    } else if (Array.isArray(coupons.codes)) {
+                        couponGlobalCodes = coupons.codes;
+                    }
+                    const couponPlanCodes = coupons.codes_plan || {};
 
                     let billingCycle = ui.default_cycle || 'Annual';
                     let globalTierValue = parseInt(Object.values(globalTiers)[0] || 1, 10);
@@ -1627,18 +1652,31 @@ class Bld_Go_PricingTable {
                         const slotAdjusted = adjustedRow ? adjustedRow[cycle] : null;
                         const slotBase = baseRow ? baseRow[cycle] : null;
 
-                        const baseValue = slotBase != null
-                            ? parseFloat(slotBase)
-                            : (slotAdjusted && slotAdjusted.base != null ? parseFloat(slotAdjusted.base) : null);
+                        let baseValue = null;
+                        if (slotBase != null) {
+                            baseValue = parseFloat(slotBase);
+                        } else if (slotAdjusted != null) {
+                            if (slotAdjusted.base != null) {
+                                baseValue = parseFloat(slotAdjusted.base);
+                            }
+                        }
 
                         let finalValue = null;
-                        if (slotAdjusted && typeof slotAdjusted.final === 'number') {
-                            finalValue = slotAdjusted.final;
-                        } else if (slotBase != null) {
+                        if (slotAdjusted != null) {
+                            if (typeof slotAdjusted.final === 'number') {
+                                finalValue = slotAdjusted.final;
+                            }
+                        }
+                        if (finalValue === null && slotBase != null) {
                             finalValue = parseFloat(slotBase);
                         }
 
-                        const applied = (slotAdjusted && Array.isArray(slotAdjusted.applied)) ? slotAdjusted.applied : [];
+                        let applied = [];
+                        if (slotAdjusted != null) {
+                            if (Array.isArray(slotAdjusted.applied)) {
+                                applied = slotAdjusted.applied;
+                            }
+                        }
 
                         return {
                             base: baseValue,
@@ -1659,7 +1697,12 @@ class Bld_Go_PricingTable {
                         const info = getPriceInfo(primary.plan_id, globalTierValue, billingCycle);
                         const base = typeof info.base === 'number' ? info.base : null;
                         const final = typeof info.final === 'number' ? info.final : null;
-                        const diff = (base != null && final != null) ? base - final : 0;
+                        let diff = 0;
+                        if (base != null) {
+                            if (final != null) {
+                                diff = base - final;
+                            }
+                        }
                         const globalApplied = (info.applied || []).filter(a => a.scope !== 'plan');
                         if (!globalApplied.length || !diff || diff <= 0) {
                             couponBanner.classList.remove('is-active');
@@ -1710,12 +1753,22 @@ class Bld_Go_PricingTable {
                                 const planApplied = (info.applied || []).filter(a => a.scope === 'plan');
                                 const cardBase = typeof info.base === 'number' ? info.base : null;
                                 const cardFinal = typeof info.final === 'number' ? info.final : null;
-                                const cardDiff = (cardBase != null && cardFinal != null) ? cardBase - cardFinal : 0;
-                                if (planApplied.length && cardDiff > 0) {
-                                    const codesLabel = planApplied.map(a => a.code).filter(Boolean).slice(0,3).join(' + ') || (couponPlanCodes[planId] || []).slice(0,3).join(' + ');
-                                    const cycleLabel = billingCycle === 'Annual' ? 'year' : 'month';
-                                    cardBanner.textContent = `${codesLabel}: -${money(cardDiff)} this ${cycleLabel}`;
-                                    cardBanner.classList.add('is-active');
+                                let cardDiff = 0;
+                                if (cardBase != null) {
+                                    if (cardFinal != null) {
+                                        cardDiff = cardBase - cardFinal;
+                                    }
+                                }
+                                if (planApplied.length > 0) {
+                                    if (cardDiff > 0) {
+                                        const codesLabel = planApplied.map(a => a.code).filter(Boolean).slice(0,3).join(' + ') || (couponPlanCodes[planId] || []).slice(0,3).join(' + ');
+                                        const cycleLabel = billingCycle === 'Annual' ? 'year' : 'month';
+                                        cardBanner.textContent = `${codesLabel}: -${money(cardDiff)} this ${cycleLabel}`;
+                                        cardBanner.classList.add('is-active');
+                                    } else {
+                                        cardBanner.classList.remove('is-active');
+                                        cardBanner.textContent = '';
+                                    }
                                 } else {
                                     cardBanner.classList.remove('is-active');
                                     cardBanner.textContent = '';
@@ -1759,8 +1812,18 @@ class Bld_Go_PricingTable {
                                 product_id: String(product.product_id || ''),
                                 public_key: String(product.public_key || '')
                             });
-                            const planCodes = (couponPlanCodes && couponPlanCodes[planId]) ? couponPlanCodes[planId] : [];
-                            const couponValue = planCodes.length ? planCodes.join(',') : (couponGlobalCodes.length ? couponGlobalCodes.join(',') : undefined);
+                            let couponValue = undefined;
+                            const planCodes = couponPlanCodes[planId];
+                            if (planCodes) {
+                                if (planCodes.length) {
+                                    couponValue = planCodes.join(',');
+                                }
+                            }
+                            if (couponValue === undefined) {
+                                if (couponGlobalCodes.length) {
+                                    couponValue = couponGlobalCodes.join(',');
+                                }
+                            }
                             handler.open({
                                 name: String(product.product_name || ''),
                                 plan_id: String(button.getAttribute('data-plan-id') || ''),
@@ -1777,19 +1840,31 @@ class Bld_Go_PricingTable {
                                 track: () => {}
                             });
                         };
-                        if (window.FS && window.FS.Checkout) {
-                            openNow();
-                        } else {
-                            // Wait up to 6s for FS to load from enqueued script, then try once.
+                        const waitForFs = () => {
                             let waited = 0;
                             const iv = setInterval(() => {
-                                if (window.FS && window.FS.Checkout) {
-                                    clearInterval(iv);
-                                    openNow();
-                                } else if ((waited += 100) > 6000) {
+                                if (window.FS) {
+                                    if (window.FS.Checkout) {
+                                        clearInterval(iv);
+                                        openNow();
+                                        return;
+                                    }
+                                }
+                                waited += 100;
+                                if (waited > 6000) {
                                     clearInterval(iv);
                                 }
                             }, 100);
+                        };
+
+                        if (window.FS) {
+                            if (window.FS.Checkout) {
+                                openNow();
+                            } else {
+                                waitForFs();
+                            }
+                        } else {
+                            waitForFs();
                         }
                     }
                     function openManualUrl(baseUrl, button) {
