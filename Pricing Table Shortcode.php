@@ -442,7 +442,7 @@ class Bld_Go_PricingTable {
     /**
      * Normalize a coupon response into a structured array for evaluation.
      *
-     * @param array  $coupon   Raw coupon array.
+     * @param array $coupon   Raw coupon array.
      *
      * @return array Normalized coupon details.
      */
@@ -1156,10 +1156,18 @@ class Bld_Go_PricingTable {
             }
         }
 
-        // Compute save pct
-        $save_pct = 0;
+        // Detect available billing cycles and compute save pct
+        $has_monthly = false;
+        $has_annual  = false;
+        $save_pct    = 0;
         foreach ( $plans as $pl ) {
             foreach ( $pl['terms'] as $t ) {
+                if ( isset( $t['Monthly'] ) ) {
+                    $has_monthly = true;
+                }
+                if ( isset( $t['Annual'] ) ) {
+                    $has_annual = true;
+                }
                 if ( ! isset( $t['Monthly'], $t['Annual'] ) ) {
                     continue;
                 }
@@ -1173,6 +1181,7 @@ class Bld_Go_PricingTable {
                 }
             }
         }
+        $show_toggle = $has_monthly && $has_annual;
 
         // Prepare predictable prefix for button IDs
         $prefix = (string) $a['product_prefix'];
@@ -1191,8 +1200,9 @@ class Bld_Go_PricingTable {
                 'plans'             => $plans,
                 'global_site_tiers' => $global_site_tiers,
                 'ui'                => [
-                        'default_cycle' => 'Annual',
+                        'default_cycle' => $has_annual ? 'Annual' : 'Monthly',
                         'save_pct'      => $save_pct,
+                        'show_toggle'   => $show_toggle,
                 ],
                 'freemius'          => $freemius_mode,
                 'pricing'           => $pricing_with_coupons,
@@ -1216,14 +1226,16 @@ class Bld_Go_PricingTable {
         ob_start();
         ?>
         <section class="go-pt" data-component="go-pricing-table">
-            <div class="go-pt-toggle" role="group" aria-label="Billing cycle">
-                <span class="go-pt-toggle__label" data-go-pt="label-monthly">Pay monthly</span>
-                <button class="go-pt-toggle__switch" type="button" aria-pressed="true" data-go-pt="cycle-switch">
-                    <span class="go-pt-toggle__knob" aria-hidden="true"></span>
-                </button>
-                <span class="go-pt-toggle__label is-active" data-go-pt="label-annually">Pay annually</span>
-                <span class="go-pt-toggle__save" data-go-pt="save-banner">Save up to <?php echo esc_html( $save_pct ); ?>%</span>
-            </div>
+            <?php if ( $show_toggle ) : ?>
+                <div class="go-pt-toggle" role="group" aria-label="Billing cycle">
+                    <span class="go-pt-toggle__label" data-go-pt="label-monthly">Pay monthly</span>
+                    <button class="go-pt-toggle__switch" type="button" aria-pressed="true" data-go-pt="cycle-switch">
+                        <span class="go-pt-toggle__knob" aria-hidden="true"></span>
+                    </button>
+                    <span class="go-pt-toggle__label is-active" data-go-pt="label-annually">Pay annually</span>
+                    <span class="go-pt-toggle__save" data-go-pt="save-banner">Save up to <?php echo esc_html( $save_pct ); ?>%</span>
+                </div>
+            <?php endif; ?>
 
             <div class="go-pt-coupon-banner" data-go-pt="coupon-banner" aria-live="polite"></div>
 
@@ -1641,6 +1653,7 @@ class Bld_Go_PricingTable {
                     const labelMonthly  = container.querySelector('[data-go-pt="label-monthly"]');
                     const labelAnnually = container.querySelector('[data-go-pt="label-annually"]');
                     const couponBanner = container.querySelector('[data-go-pt="coupon-banner"]');
+                    const showToggle = ui.show_toggle !== false;
 
                     function getPriceInfo(planId, licenses, cycle) {
                         const adjustedPlan = pricing[planId] || {};
@@ -1779,7 +1792,7 @@ class Bld_Go_PricingTable {
                         updateCouponBanner();
                     };
 
-                    if (toggle) {
+                    if (toggle && showToggle) {
                         toggle.addEventListener('click', () => {
                             setCycle(billingCycle === 'Annual' ? 'Monthly' : 'Annual');
                         });
