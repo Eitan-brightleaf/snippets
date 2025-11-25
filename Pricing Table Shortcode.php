@@ -999,7 +999,6 @@ class Bld_Go_PricingTable {
                 'codes_global' => [],
                 'codes_plan'   => [],
                 'ids'          => [],
-                'stack'        => true,
         ];
 
         if ( 'automatic' === $freemius_mode ) {
@@ -1389,8 +1388,9 @@ class Bld_Go_PricingTable {
             /* Coupon banner */
             .go-pt-coupon-banner{
                 position:absolute;
-                top:0; right:0;
-                transform:translate(50%,20%) rotate(45deg);
+                top:0;
+                left: 50%;
+                transform:translate(-50%,-110%);
                 background: linear-gradient(135deg, var(--go-pt-accent), var(--go-pt-accent-2));
                 color:#fff;
                 padding:.45rem 2.4rem;
@@ -1402,15 +1402,17 @@ class Bld_Go_PricingTable {
                 z-index:3;
                 display:none;
                 pointer-events:none;
+                border-radius: 50px;
+                white-space: nowrap;
             }
             .go-pt-coupon-banner.is-active{display:block;}
             @media (max-width: 899.98px) {
                 .go-pt-coupon-banner{
-                    top:0;
-                    right:0;
-                    transform:translate(55%,-55%) rotate(45deg);
-                    padding:.4rem 2rem;
+                    padding:.4rem 1rem;
                     font-size:.8rem;
+                    width: 90%;
+                    text-align: center;
+                    white-space: normal;
                 }
             }
 
@@ -1729,8 +1731,7 @@ class Bld_Go_PricingTable {
                             return;
                         }
                         const cycleLabel = billingCycle === 'Annual' ? 'year' : 'month';
-                        const codesLabel = (globalApplied.map(a => a.code).filter(Boolean).slice(0,3).join(' + ')) || couponGlobalCodes.slice(0,3).join(' + ');
-                        couponBanner.textContent = `${codesLabel}: -${money(diff)} this ${cycleLabel}`;
+                        couponBanner.textContent = `${money(diff)} off this ${cycleLabel}`;
                         couponBanner.classList.add('is-active');
                     }
 
