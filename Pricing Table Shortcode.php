@@ -1471,6 +1471,7 @@ class Bld_Go_PricingTable {
             .go-pt-card__price-main { display: flex; gap: .4rem; align-items: baseline; justify-content: flex-end; }
             .go-pt-card__price-amount { font-size: 1.6rem; font-weight: 800; color: var(--go-pt-text); }
             .go-pt-card__price-amount.is-discounted { color: #4ade80; }
+            .go-pt-card__price-amount.is-error { font-size: .9rem; font-weight: 600; color: var(--go-pt-muted); }
             .go-pt-card__price-old { font-size: .95rem; color: var(--go-pt-muted); text-decoration: line-through; opacity: .8; min-width: 0; }
             .go-pt-card__price-term { display: block; font-size: .9rem; color: var(--go-pt-muted); }
             .go-pt-card__price-sub { display:flex; gap:.35rem; justify-content:flex-end; align-items: baseline; font-size:.85rem; color: var(--go-pt-muted); }
@@ -1520,7 +1521,7 @@ class Bld_Go_PricingTable {
         </style>
 
         <script>
-            /* BrightLeaf GO Pricing Table logic v1.0.7 (inline) */
+            /* BrightLeaf GO Pricing Table logic v1.0.8 (inline) */
             (function () {
                 function parseDataPayload(root) {
                     const tag = root.querySelector('.go-pt-data');
@@ -1530,6 +1531,21 @@ class Bld_Go_PricingTable {
                 function money(x) {
                     const num = typeof x === 'number' ? x : parseFloat(String(x).replace(/[$,]/g, '')) || 0;
                     return '$' + num.toFixed(2);
+                }
+                const FALLBACK_TEXT = 'Temporarily unavailable. Please refresh.';
+                function setErrorForCard(card) {
+                    const priceAmount = card.querySelector('[data-go-pt="price-amount"]');
+                    const priceTerm   = card.querySelector('[data-go-pt="price-term"]');
+                    const priceSubOld = card.querySelector('[data-go-pt="price-sub-old"]');
+                    const priceSubNew = card.querySelector('[data-go-pt="price-sub-new"]');
+                    if (priceAmount) {
+                        priceAmount.textContent = FALLBACK_TEXT;
+                        priceAmount.classList.add('is-error');
+                        priceAmount.classList.remove('is-discounted');
+                    }
+                    if (priceTerm) { priceTerm.style.display = 'none'; }
+                    if (priceSubOld) { priceSubOld.textContent = ''; priceSubOld.style.display = 'none'; }
+                    if (priceSubNew) { priceSubNew.textContent = ''; priceSubNew.style.display = 'none'; }
                 }
                 function updateCardPrice(card, cycle, licenses, priceInfo) {
                     const priceAmount = card.querySelector('[data-go-pt="price-amount"]');
@@ -1566,7 +1582,15 @@ class Bld_Go_PricingTable {
                         const baseMonthly = baseAnnual != null ? baseAnnual / 12 : null;
                         const finalMonthly = finalAnnual != null ? finalAnnual / 12 : null;
 
-                        if (priceAmount) priceAmount.textContent = finalMonthly != null ? money(finalMonthly) : '—';
+                        if (priceAmount) {
+                            if (finalMonthly != null) {
+                                priceAmount.textContent = money(finalMonthly);
+                                priceAmount.classList.remove('is-error');
+                            } else {
+                                priceAmount.textContent = FALLBACK_TEXT;
+                                priceAmount.classList.add('is-error');
+                            }
+                        }
                         if (priceOld) {
                             priceOld.textContent = hasDiscount ? (baseMonthly != null ? money(baseMonthly) : '') : '';
                             priceOld.style.display = priceOld.textContent ? '' : 'none';
@@ -1581,7 +1605,15 @@ class Bld_Go_PricingTable {
                             priceSubOld.style.display = priceSubOld.textContent ? '' : 'none';
                         }
                     } else {
-                        if (priceAmount) priceAmount.textContent = finalPrice != null ? money(finalPrice) : '—';
+                        if (priceAmount) {
+                            if (finalPrice != null) {
+                                priceAmount.textContent = money(finalPrice);
+                                priceAmount.classList.remove('is-error');
+                            } else {
+                                priceAmount.textContent = FALLBACK_TEXT;
+                                priceAmount.classList.add('is-error');
+                            }
+                        }
                         if (priceOld) {
                             priceOld.textContent = hasDiscount ? (basePrice != null ? money(basePrice) : '') : '';
                             priceOld.style.display = priceOld.textContent ? '' : 'none';
@@ -1617,7 +1649,9 @@ class Bld_Go_PricingTable {
                 function init(container) {
                     const data = parseDataPayload(container);
                     if (!data) {
-                        return;
+                        // mark visible, but indicate error to the user for this container
+                        container.querySelectorAll('[data-go-pt="card"]').forEach(setErrorForCard);
+                        return false;
                     }
 
                     const product = data.product || {};
@@ -1915,14 +1949,39 @@ class Bld_Go_PricingTable {
                             }
                         }
                     });
+                    return true;
                 }
 
+                const retryDelays = [250, 1000, 3000];
+                let retryIndex = 0;
+                let retryTimer = null;
+                let moTimer = null;
+
                 function bootstrap() {
-                    document.querySelectorAll('[data-component="go-pricing-table"]').forEach(el => {
-                        if (el.getAttribute('data-go-pt-init')) return;
-                        el.setAttribute('data-go-pt-init', '1');
-                        init(el);
+                    const nodes = document.querySelectorAll('[data-component="go-pricing-table"]');
+                    let remaining = 0;
+                    nodes.forEach(el => {
+                        if (el.getAttribute('data-go-pt-init') === '1') return;
+                        try {
+                            const ok = init(el);
+                            if (ok) {
+                                el.setAttribute('data-go-pt-init', '1');
+                            } else {
+                                remaining++;
+                            }
+                        } catch (e) {
+                            // show error to the user and leave uninitialized for a later retry
+                            el.querySelectorAll('[data-go-pt="card"]').forEach(setErrorForCard);
+                            remaining++;
+                        }
                     });
+
+                    // schedule another pass only if there are sections not yet initialized
+                    clearTimeout(retryTimer);
+                    if (remaining > 0 && retryIndex < retryDelays.length) {
+                        const delay = retryDelays[retryIndex++];
+                        retryTimer = setTimeout(bootstrap, delay);
+                    }
                 }
 
                 if (document.readyState === 'loading') {
@@ -1932,6 +1991,15 @@ class Bld_Go_PricingTable {
                 }
                 // safety: run again after a tick in case markup renders after script tag
                 setTimeout(bootstrap, 0);
+
+                // Observe DOM for late-inserted pricing tables or payloads
+                try {
+                    const observer = new MutationObserver(() => {
+                        clearTimeout(moTimer);
+                        moTimer = setTimeout(bootstrap, 60);
+                    });
+                    observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
+                } catch (e) { /* no-op */ }
             })();
         </script>
         <?php
