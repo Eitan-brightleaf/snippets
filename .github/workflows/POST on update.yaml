@@ -3,7 +3,12 @@ name: Submit Form on File Update
 on:
   push:
     paths-ignore:
-      - '.github/workflows/**'
+      - '.github/**'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'README.md'
+      - 'LICENSE'
+      - '*.md'
     branches:
       - main
 
@@ -17,19 +22,35 @@ jobs:
         with:
           fetch-depth: 0  # Ensure full commit history
 
-      - name: Detect files and notify Gravity Forms
+      - name: Detect files and notify Gravity Forms (snippets only)
         env:
           GF_UPDATE_WEBHOOK_URL: ${{ secrets.GF_UPDATE_WEBHOOK_URL }}
           COMMIT_MESSAGE: "${{ github.event.head_commit.message }}"
         run: |
           set -euo pipefail
           # Include modified (M) and renamed (R) files
-          CHANGED_FILES=$(git diff -M --name-only --diff-filter=MR "${{ github.event.before }}".."${{ github.sha }}")
+          CHANGED_FILES=$(git -c core.quotepath=false diff -M --name-only --diff-filter=MR "${{ github.event.before }}".."${{ github.sha }}")
 
+          # Filter to only real snippet files: *.php or *.js, exclude dotfiles and .github
+          FILTERED_FILES=""
           if [ -n "$CHANGED_FILES" ]; then
+            while IFS= read -r FILE; do
+              [ -z "$FILE" ] && continue
+              case "$FILE" in
+                .github/*|*/.github/*) continue ;;
+                .*) continue ;;
+                */.*) continue ;;
+                *.php|*.js) FILTERED_FILES="${FILTERED_FILES}"$'\n'"$FILE" ;;
+                *) continue ;;
+              esac
+            done <<< "$CHANGED_FILES"
+            FILTERED_FILES=$(echo "$FILTERED_FILES" | sed '/^$/d')
+          fi
+
+          if [ -n "$FILTERED_FILES" ]; then
             echo "Processing for Gravity Forms..."
           
-            while IFS= read -r FILE; do
+            echo "$FILTERED_FILES" | while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
               FILE_NAME=$(basename "$FILE" | sed 's/\.[^.]*$//')
 
@@ -50,7 +71,7 @@ jobs:
                 cat /tmp/resp_gf.json
                 exit 1
               fi
-            done <<< "$CHANGED_FILES"
+            done
           else
             echo "No relevant files changed."
           fi
@@ -64,22 +85,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect files and notify Update Feed
+      - name: Detect files and notify Update Feed (snippets only)
         env:
           UPDATE_FEED_URL: ${{ secrets.UPDATE_FEED_URL }}
           BLD_API_KEY: ${{ secrets.BLD_API_KEY }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          CHANGED_FILES=$(git diff -M --name-only --diff-filter=MR "${{ github.event.before }}".."${{ github.sha }}")
+          CHANGED_FILES=$(git -c core.quotepath=false diff -M --name-only --diff-filter=MR "${{ github.event.before }}".."${{ github.sha }}")
+
+          # Filter to only real snippet files: *.php or *.js, exclude dotfiles and .github
+          FILTERED_FILES=""
+          if [ -n "$CHANGED_FILES" ]; then
+            while IFS= read -r FILE; do
+              [ -z "$FILE" ] && continue
+              case "$FILE" in
+                .github/*|*/.github/*) continue ;;
+                .*) continue ;;
+                */.*) continue ;;
+                *.php|*.js) FILTERED_FILES="${FILTERED_FILES}"$'\n'"$FILE" ;;
+                *) continue ;;
+              esac
+            done <<< "$CHANGED_FILES"
+            FILTERED_FILES=$(echo "$FILTERED_FILES" | sed '/^$/d')
+          fi
           
           # Generate Short SHA for a cleaner version number (e.g., "a1b2c3d")
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
 
-          if [ -n "$CHANGED_FILES" ]; then
+          if [ -n "$FILTERED_FILES" ]; then
             echo "Processing for Update Feed..."
 
-            while IFS= read -r FILE; do
+            echo "$FILTERED_FILES" | while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
               FILE_NAME=$(basename "$FILE" | sed 's/\.[^.]*$//')
 
@@ -101,7 +138,7 @@ jobs:
                 cat /tmp/resp_feed.json
                 exit 1
               fi
-            done <<< "$CHANGED_FILES"
+            done
           else
             echo "No relevant files changed."
           fi

@@ -3,7 +3,12 @@ name: Submit New Files to Gravity Forms
 on:
   push:
     paths-ignore:
-      - '.github/workflows/**'
+      - '.github/**'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'README.md'
+      - 'LICENSE'
+      - '*.md'
   create:
   workflow_dispatch:
 
@@ -50,11 +55,27 @@ jobs:
             CLEAN_ADDED_FILES=$(echo "$CLEAN_ADDED_FILES" | sed '/^$/d')
           fi
 
+          # Further filter to only real snippet files: *.php or *.js; exclude dotfiles and .github
+          FILTERED_FILES=""
           if [ -n "$CLEAN_ADDED_FILES" ]; then
-            echo "New files detected (renames excluded):"
-            echo "$CLEAN_ADDED_FILES"
+            while IFS= read -r FILE; do
+              [ -z "$FILE" ] && continue
+              case "$FILE" in
+                .github/*|*/.github/*) continue ;;
+                .*) continue ;;
+                */.*) continue ;;
+                *.php|*.js) FILTERED_FILES="${FILTERED_FILES}"$'\n'"$FILE" ;;
+                *) continue ;;
+              esac
+            done <<< "$CLEAN_ADDED_FILES"
+            FILTERED_FILES=$(echo "$FILTERED_FILES" | sed '/^$/d')
+          fi
 
-            echo "$CLEAN_ADDED_FILES" | while IFS= read -r FILE; do
+          if [ -n "$FILTERED_FILES" ]; then
+            echo "New files detected (renames excluded):"
+            echo "$FILTERED_FILES"
+
+            echo "$FILTERED_FILES" | while IFS= read -r FILE; do
               [ -z "$FILE" ] && continue
               FILE_NAME=$(basename "$FILE")
               FILE_NAME=${FILE_NAME%.*}
