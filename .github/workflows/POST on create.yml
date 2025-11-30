@@ -60,8 +60,8 @@ jobs:
               FILE_NAME=${FILE_NAME%.*}
               ENCODED_FILE_NAME=$(echo "$FILE" | jq -sRr @uri) # encode full path for URLs
 
-              BLOB_URL="https://github.com/${GITHUB_REPO}/blob/${GITHUB_SHA}/${ENCODED_FILE_NAME}"
-              RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${ENCODED_FILE_NAME}"
+              BLOB_URL="https://github.com/${GITHUB_REPO}/snippets/blob/main/${ENCODED_FILE_NAME}"
+              RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/snippets/refs/heads/main/${ENCODED_FILE_NAME}"
 
               JSON_PAYLOAD=$(jq -n \
                 --arg file_name "$FILE_NAME" \
