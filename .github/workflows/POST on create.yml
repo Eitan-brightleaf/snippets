@@ -74,6 +74,7 @@ jobs:
               echo "Raw URL: $RAW_URL"
 
               HTTP_STATUS=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST "$GF_WEBHOOK_URL" \
+                -u "${{ secrets.GF_CONSUMER_KEY }}:${{ secrets.GF_CONSUMER_SECRET }}" \
                 -H "Content-Type: application/json" \
                 -d "$JSON_PAYLOAD")
 
@@ -83,6 +84,37 @@ jobs:
                 exit 1
               else
                 echo "✓ Success (HTTP $HTTP_STATUS)"
+          
+                # Extract entry_id from the saved response
+                ENTRY_ID=$(jq -r '.entry_id // empty' /tmp/resp.json)
+
+                if [ -n "$ENTRY_ID" ]; then
+                  echo "Captured Entry ID: $ENTRY_ID"
+          
+                  # Sanitize filename: lowercase, spaces to dashes, remove specific chars (& , ' " ( ))
+                  SANITIZED_NAME=$(echo "$FILE_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -d "&,'\"()")
+          
+                  # Construct the URL for field 10
+                  FIELD_10_VALUE="https://brightleafdigital.io/code/entry/${ENTRY_ID}-${SANITIZED_NAME}"
+          
+                  echo "Updating Field 10 with: $FIELD_10_VALUE"
+          
+                  # Create payload for field 10 update
+                  UPDATE_PAYLOAD=$(jq -n --arg val "$FIELD_10_VALUE" '{ "10": $val }')
+          
+                  # Send PUT request to update the entry
+                  UPDATE_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT "https://brightleafdigital.io/wp-json/gf/v2/entries/${ENTRY_ID}" \
+                    -u "${{ secrets.GF_CONSUMER_KEY }}:${{ secrets.GF_CONSUMER_SECRET }}" \
+                    -H "Content-Type: application/json" \
+                    -d "$UPDATE_PAYLOAD")
+          
+                  if [ "$UPDATE_STATUS" -lt 200 ] || [ "$UPDATE_STATUS" -ge 300 ]; then
+                    echo "⚠️ Update failed (HTTP $UPDATE_STATUS)"
+                    exit 1
+                  else
+                    echo "✓ Entry updated successfully"
+                  fi
+                fi
               fi
             done
           else
