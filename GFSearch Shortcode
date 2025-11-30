@@ -1,4 +1,4 @@
-// version 1.0.1
+// version DEPRECATED. SEE PLUGIN INSTEAD
 add_action(
     'init',
     function () {
