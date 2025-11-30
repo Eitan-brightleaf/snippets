@@ -1,3 +1,4 @@
+# DEPRECATED. USE PLUGIN INSTEAD
 add_action('admin_menu', 'register_form_folders_submenu', 15);
 add_action('init', 'register_form_folders_taxonomy');
 add_action('wp_ajax_create_folder', 'handle_create_folder');
