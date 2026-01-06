@@ -174,7 +174,7 @@
 
 			// Identify the person/entity value from the current submission.
 			$name_value = $collect_submitted_value( $name_field_id );
-			if ( '' !== $name_value ) {
+			if ( '' === $name_value ) {
 				return $validation_result;
 			}
 
