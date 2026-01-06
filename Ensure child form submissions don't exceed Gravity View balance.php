@@ -168,7 +168,15 @@
 			$existing_entries = $parent_gpnf && ! empty( $ids ) ? $parent_gpnf->get_entries( $ids ) : [];
 
 			$batch_total = 0.0;
+
+            // Determine if we are currently editing an entry so we don't double-count it
+			$editing_entry_id = rgpost( 'gpnf_entry_id' ) ? rgpost( 'gpnf_entry_id' ) : rgget( 'fwp_entry' );
+
 			foreach ( $existing_entries as $entry ) {
+                // If the entry we are looping through is the one currently being edited, skip it.
+                if ( $editing_entry_id && $editing_entry_id == rgar( $entry, 'id' ) ) {
+                    continue;
+                }
 				$batch_total += $to_number( rgar( $entry, (string) $amount_field_id ) );
 			}
 
