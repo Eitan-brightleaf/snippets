@@ -22,6 +22,11 @@ add_action(
 
                 $selected_form_id = intval( rgget( 'bld_embed_form_id' ) );
 
+                // APC has an unsafe get_current_screen() usage during admin-ajax requests.
+                // Disable GF AJAX in this widget when APC is active to avoid admin-ajax.php submissions.
+                $disable_ajax = class_exists( 'GF_Advanced_Post_Creation' ) || defined( 'GF_ADVANCEDPOSTCREATION_VERSION' );
+                $ajax         = ! $disable_ajax;
+
                 ?>
                 <div class="embed-form-widget">
                     <form method="get" action="<?= esc_url( admin_url( 'index.php' ) ); ?>">
@@ -44,7 +49,7 @@ add_action(
                 // Render the form (title/description disabled, AJAX enabled).
                 // gravity_form( $id, $display_title, $display_description, $display_inactive, $field_values, $ajax )
                 if ( $selected_form_id ) {
-                    gravity_form( $selected_form_id, false, false, false, null, true );
+                    gravity_form( $selected_form_id, false, false, false, null, $ajax );
                 }
             }
         );
@@ -60,10 +65,14 @@ add_action(
         }
 
         $form_id = intval( rgget( 'bld_embed_form_id' ) );
-        if ( $form_id ) {
-            // If your form uses AJAX (as above), pass true to load the AJAX script too.
-            gravity_form_enqueue_scripts( $form_id, true );
+        if ( ! $form_id ) {
+            return;
         }
+
+        $disable_ajax = class_exists( 'GF_Advanced_Post_Creation' ) || defined( 'GF_ADVANCEDPOSTCREATION_VERSION' );
+        $ajax         = ! $disable_ajax;
+
+        gravity_form_enqueue_scripts( $form_id, $ajax );
     }
 );
 
